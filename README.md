@@ -99,6 +99,66 @@ With the `shank` feature enabled:
 - `#[SolzempicEntrypoint]` adds `#[derive(ShankInstruction)]` to the enum
 - `#[derive(Account)]` adds `#[derive(ShankAccount)]` to account structs
 
+### Testing IDL Generation
+
+**1. Verify generated metadata in tests:**
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_transfer_shank_metadata() {
+        // Check account count
+        assert_eq!(Transfer::NUM_ACCOUNTS, 4);
+
+        // Verify specific account constraints
+        let accounts = &Transfer::SHANK_ACCOUNTS;
+
+        assert_eq!(accounts[0].name, "source");
+        assert!(accounts[0].is_writable);
+        assert!(!accounts[0].is_signer);
+
+        assert_eq!(accounts[2].name, "owner");
+        assert!(accounts[2].is_signer);
+
+        assert_eq!(accounts[3].name, "token_program");
+        assert!(accounts[3].is_program);
+    }
+
+    #[test]
+    fn test_shank_attribute_output() {
+        // Print Shank attributes for manual verification
+        println!("{}", Transfer::shank_accounts());
+
+        // Verify the output contains expected attributes
+        let attrs = Transfer::shank_accounts();
+        assert!(attrs.contains("writable"));
+        assert!(attrs.contains("signer"));
+    }
+}
+```
+
+**2. Print Shank attributes for your instruction enum:**
+
+The `shank_accounts()` method returns copy-paste ready attributes:
+
+```rust
+fn main() {
+    println!("Transfer accounts:");
+    println!("{}", Transfer::shank_accounts());
+}
+```
+
+Output:
+```
+#[account(0, writable, name="source")]
+#[account(1, writable, name="destination")]
+#[account(2, signer, name="owner")]
+#[account(3, name="token_program")]
+```
+
 ### Building the IDL
 
 1. Install shank CLI:
