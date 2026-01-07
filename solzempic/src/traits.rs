@@ -6,6 +6,82 @@
 use bytemuck::Pod;
 use pinocchio::error::ProgramError;
 
+/// Trait for account structs with discriminator field access.
+///
+/// This trait provides common discriminator handling and validation methods
+/// for account types that have an 8-byte discriminator field.
+///
+/// # Example
+///
+/// ```ignore
+/// impl Account for MyAccount {
+///     const DISCRIMINATOR: u8 = 1;
+///     const LEN: usize = core::mem::size_of::<Self>();
+///
+///     fn discriminator(&self) -> &[u8; 8] {
+///         &self.discriminator
+///     }
+/// }
+/// ```
+pub trait Account: Pod {
+    /// The discriminator byte for this account type.
+    const DISCRIMINATOR: u8;
+
+    /// Account size in bytes.
+    const LEN: usize;
+
+    /// Get the discriminator bytes from the account data.
+    fn discriminator(&self) -> &[u8; 8];
+
+    /// Verify this account has the correct discriminator.
+    #[inline]
+    fn verify_discriminator(&self) -> bool {
+        self.discriminator()[0] == Self::DISCRIMINATOR
+    }
+
+    /// Check raw account data without parsing.
+    #[inline]
+    fn check_data(data: &[u8]) -> bool {
+        check_discriminator(data, Self::DISCRIMINATOR)
+    }
+
+    /// Load account from raw data, validating discriminator.
+    #[inline]
+    fn load(data: &[u8]) -> Result<&Self, ProgramError> {
+        if data.len() < Self::LEN {
+            return Err(ProgramError::InvalidAccountData);
+        }
+        if !Self::check_data(data) {
+            return Err(ProgramError::InvalidAccountData);
+        }
+        Ok(bytemuck::from_bytes(&data[..Self::LEN]))
+    }
+
+    /// Load mutable account from raw data, validating discriminator.
+    #[inline]
+    fn load_mut(data: &mut [u8]) -> Result<&mut Self, ProgramError> {
+        if data.len() < Self::LEN {
+            return Err(ProgramError::InvalidAccountData);
+        }
+        if !Self::check_data(data) {
+            return Err(ProgramError::InvalidAccountData);
+        }
+        Ok(bytemuck::from_bytes_mut(&mut data[..Self::LEN]))
+    }
+
+    /// Load account from raw data without discriminator check (unchecked).
+    #[inline]
+    fn load_unchecked(data: &[u8]) -> &Self {
+        bytemuck::from_bytes(&data[..Self::LEN])
+    }
+
+    /// Load mutable account from raw data without discriminator check (unchecked).
+    #[inline]
+    fn load_unchecked_mut(data: &mut [u8]) -> &mut Self {
+        bytemuck::from_bytes_mut(&mut data[..Self::LEN])
+    }
+}
+
 /// Trait for Pod types that can be loaded from account data.
 ///
 /// Implement this for `bytemuck::Pod` structs that represent account data.

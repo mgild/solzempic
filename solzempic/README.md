@@ -133,28 +133,24 @@ This single attribute generates:
 ### 2. Define Account Types
 
 ```rust
-use bytemuck::{Pod, Zeroable};
-use solzempic::Loadable;
-
-// Define your account type discriminators
+// Define discriminators with an enum
 solzempic::define_account_types! {
     Counter = 1,
     User = 2,
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
+#[solzempic::account(discriminator = AccountType::Counter)]
 pub struct Counter {
-    pub discriminator: u8,
-    pub _padding: [u8; 7],
+    pub discriminator: [u8; 8],
     pub owner: Pubkey,
     pub count: u64,
 }
-
-impl Loadable for Counter {
-    const DISCRIMINATOR: u8 = AccountType::Counter as u8;
-}
 ```
+
+The `#[account(discriminator = ...)]` macro automatically:
+- Adds `#[repr(C)]`, `Pod`, `Zeroable` derives
+- Implements `Loadable` and `Account` traits
+- Generates `LEN`, `DISCRIMINATOR`, and `discriminator()` method
 
 ### 3. Implement an Instruction
 

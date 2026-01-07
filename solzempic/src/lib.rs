@@ -136,7 +136,7 @@
 
 mod account;
 pub mod programs;
-mod traits;
+pub mod traits;
 mod wrappers;
 
 pub use account::{create_pda_account, rent_exempt_minimum, transfer_lamports, LAMPORTS_PER_BYTE, MAX_ACCOUNT_SIZE};
@@ -166,10 +166,10 @@ pub use programs::{
 pub use wrappers::{AccountRef, AccountRefMut, AsAccountRef, ShardRefContext};
 
 // Re-export core traits
-pub use traits::{check_discriminator, Initializable, Loadable};
+pub use traits::{check_discriminator, Account, Initializable, Loadable};
 
-// Re-export derive macros
-pub use solzempic_macros::{Account, SolzempicEntrypoint, account, instruction};
+// Re-export derive macros (Account derive renamed to avoid conflict with Account trait)
+pub use solzempic_macros::{Account as AccountDerive, SolzempicEntrypoint, account, instruction};
 
 /// Define an AccountType enum with automatic discriminator values.
 ///

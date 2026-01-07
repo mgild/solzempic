@@ -7,6 +7,10 @@ authors.workspace = true
 repository.workspace = true
 description = "Solzempic - Solana instruction framework"
 
+[features]
+default = []
+shank = ["solzempic-macros/shank"]
+
 [lints]
 workspace = true
 

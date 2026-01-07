@@ -738,7 +738,7 @@ pub fn derive_account(input: TokenStream) -> TokenStream {
 
         impl #name {
             /// The discriminator value for this account type.
-            pub const DISCRIMINATOR: u8 = #discriminator;
+            pub const DISCRIMINATOR_VALUE: u8 = #discriminator;
 
             /// The discriminator as an 8-byte array.
             pub const DISCRIMINATOR_BYTES: [u8; 8] = [#discriminator, 0, 0, 0, 0, 0, 0, 0];
@@ -748,6 +748,10 @@ pub fn derive_account(input: TokenStream) -> TokenStream {
             pub fn check_discriminator(data: &[u8]) -> bool {
                 !data.is_empty() && data[0] == #discriminator
             }
+        }
+
+        impl ::solzempic::Loadable for #name {
+            const DISCRIMINATOR: u8 = #discriminator;
         }
     };
 
@@ -806,25 +810,48 @@ fn analyze_field_type(ty: &Type) -> (bool, bool, bool, usize) {
 /// Adds `#[repr(C)]`, `#[derive(Clone, Copy)]`, unsafe Pod/Zeroable impls, and optionally
 /// `#[derive(ShankAccount)]` (when `shank` feature is enabled).
 ///
+/// If a discriminator is provided, also generates `impl Loadable`.
+///
 /// Uses unsafe impl for Pod/Zeroable to support structs with manually-verified padding.
 ///
 /// # Example
 ///
 /// ```ignore
+/// // Without discriminator (just Pod/Zeroable):
 /// #[account]
 /// pub struct Market {
 ///     pub discriminator: [u8; 8],
 ///     pub admin: Pubkey,
-///     // ...
+/// }
+///
+/// // With discriminator (also generates impl Loadable):
+/// #[account(discriminator = AccountType::Market)]
+/// pub struct Market {
+///     pub discriminator: [u8; 8],
+///     pub admin: Pubkey,
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn account(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn account(attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemStruct);
     let name = &input.ident;
     let vis = &input.vis;
     let attrs = &input.attrs;
     let generics = &input.generics;
+
+    // Parse discriminator from attribute if provided
+    let discriminator_expr: Option<syn::Expr> = if attr.is_empty() {
+        None
+    } else {
+        let attr_str = attr.to_string();
+        // Parse "discriminator = <expr>"
+        if let Some(eq_pos) = attr_str.find('=') {
+            let expr_str = attr_str[eq_pos + 1..].trim();
+            syn::parse_str(expr_str).ok()
+        } else {
+            None
+        }
+    };
 
     let fields = match &input.fields {
         Fields::Named(fields_named) => &fields_named.named,
@@ -842,6 +869,38 @@ pub fn account(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     });
 
+    // Check if struct has a discriminator field
+    let has_discriminator_field = fields.iter().any(|f| {
+        f.ident.as_ref().map(|i| i == "discriminator").unwrap_or(false)
+    });
+
+    // Generate Loadable impl if discriminator provided
+    let loadable_impl = discriminator_expr.map(|disc| {
+        let account_impl = if has_discriminator_field {
+            quote! {
+                impl ::solzempic::traits::Account for #name {
+                    const DISCRIMINATOR: u8 = #disc as u8;
+                    const LEN: usize = ::core::mem::size_of::<Self>();
+
+                    #[inline]
+                    fn discriminator(&self) -> &[u8; 8] {
+                        &self.discriminator
+                    }
+                }
+            }
+        } else {
+            quote! {}
+        };
+
+        quote! {
+            impl ::solzempic::Loadable for #name {
+                const DISCRIMINATOR: u8 = #disc as u8;
+            }
+
+            #account_impl
+        }
+    });
+
     let expanded = quote! {
         #[repr(C)]
         #[derive(Clone, Copy)]
@@ -854,6 +913,8 @@ pub fn account(_attr: TokenStream, item: TokenStream) -> TokenStream {
         // Safety: Struct is #[repr(C)] - caller ensures no uninitialized padding
         unsafe impl ::bytemuck::Pod for #name {}
         unsafe impl ::bytemuck::Zeroable for #name {}
+
+        #loadable_impl
     };
 
     TokenStream::from(expanded)
