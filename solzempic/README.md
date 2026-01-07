@@ -133,13 +133,7 @@ This single attribute generates:
 ### 2. Define Account Types
 
 ```rust
-// Define discriminators with an enum
-solzempic::define_account_types! {
-    Counter = 1,
-    User = 2,
-}
-
-#[solzempic::account(discriminator = AccountType::Counter)]
+#[solzempic::account(discriminator = 1)]
 pub struct Counter {
     pub discriminator: [u8; 8],
     pub owner: Pubkey,
@@ -147,7 +141,7 @@ pub struct Counter {
 }
 ```
 
-The `#[account(discriminator = ...)]` macro automatically:
+The `#[account(discriminator = N)]` macro automatically:
 - Adds `#[repr(C)]`, `Pod`, `Zeroable` derives
 - Implements `Loadable` and `Account` traits
 - Generates `LEN`, `DISCRIMINATOR`, and `discriminator()` method
