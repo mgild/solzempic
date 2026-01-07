@@ -1,0 +1,19 @@
+[package]
+name = "solzempic"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Solzempic - Solana instruction framework"
+
+[lints]
+workspace = true
+
+[dependencies]
+pinocchio = { workspace = true }
+pinocchio-pubkey = { workspace = true }
+bytemuck = { workspace = true }
+braid-types = { workspace = true }
+solzempic-macros = { workspace = true }
+solana-address = { workspace = true }
