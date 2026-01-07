@@ -125,6 +125,45 @@ use syn::{parse_macro_input, Data, DeriveInput, Fields, Expr, Lit, ItemImpl, Imp
 /// - Applied to a non-enum type
 /// - No program ID provided in attribute
 /// - Variant lacks explicit discriminant value
+/// Parse account specs from #[accounts(...)] attribute on enum variant.
+/// Format: #[accounts(name: constraint, name2: constraint2, ...)]
+/// Constraints: mut (writable), signer, mut_signer (both), program, or empty (readonly)
+fn parse_variant_accounts(attrs: &[syn::Attribute]) -> Vec<(String, bool, bool, bool)> {
+    let mut accounts = Vec::new();
+
+    for attr in attrs {
+        if attr.path().is_ident("accounts") {
+            // Parse the content as comma-separated name: constraint pairs
+            let content = attr.meta.require_list()
+                .expect("#[accounts(...)] requires a list");
+
+            let tokens_str = content.tokens.to_string();
+
+            // Parse "name: constraint, name2: constraint2" format
+            for part in tokens_str.split(',') {
+                let part = part.trim();
+                if part.is_empty() { continue; }
+
+                let (name, constraint) = if let Some(colon_pos) = part.find(':') {
+                    let name = part[..colon_pos].trim().to_string();
+                    let constraint = part[colon_pos + 1..].trim().to_string();
+                    (name, constraint)
+                } else {
+                    (part.to_string(), String::new())
+                };
+
+                let is_signer = constraint == "signer" || constraint == "mut_signer";
+                let is_writable = constraint == "mut" || constraint == "mut_signer";
+                let is_program = constraint == "program";
+
+                accounts.push((name, is_signer, is_writable, is_program));
+            }
+        }
+    }
+
+    accounts
+}
+
 #[proc_macro_attribute]
 #[allow(non_snake_case)]
 pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -157,39 +196,57 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         _ => panic!("SolzempicEntrypoint can only be applied to enums"),
     };
 
-    // Collect variant info (name and discriminator value)
+    // Collect variant info (name, discriminator, and accounts)
     let variant_info: Vec<_> = variants.iter().map(|variant| {
         let variant_name = &variant.ident;
         let discriminant = variant.discriminant.as_ref()
             .expect("SolzempicEntrypoint requires explicit discriminant values");
         let disc_expr = &discriminant.1;
-        (variant_name, disc_expr)
+        let accounts = parse_variant_accounts(&variant.attrs);
+        (variant_name, disc_expr, accounts)
     }).collect();
 
     // Generate TryFrom<u8> match arms
-    let try_from_arms = variant_info.iter().map(|(name, disc)| {
+    let try_from_arms = variant_info.iter().map(|(name, disc, _)| {
         quote! { #disc => Ok(#enum_name::#name), }
     });
 
     // Generate dispatch match arms (for backward compat)
-    let dispatch_arms = variant_info.iter().map(|(name, _)| {
+    let dispatch_arms = variant_info.iter().map(|(name, _, _)| {
         quote! {
             #enum_name::#name => <#name<'_> as ::solzempic::Instruction<'_>>::process(program_id, accounts, data),
         }
     });
 
     // Generate process match arms (direct discriminator to handler)
-    let process_arms = variant_info.iter().map(|(name, disc)| {
+    let process_arms = variant_info.iter().map(|(name, disc, _)| {
         quote! {
             #disc => <#name<'_> as ::solzempic::Instruction<'_>>::process(program_id, accounts, &data[1..]),
         }
     });
 
-    // Generate variant definitions for the enum
-    let variant_defs = variants.iter().map(|v| {
-        let name = &v.ident;
-        let disc = &v.discriminant.as_ref().unwrap().1;
-        quote! { #name = #disc }
+    // Generate variant definitions for the enum with Shank #[account(...)] attributes
+    let variant_defs = variant_info.iter().map(|(name, disc, accounts)| {
+        // Generate #[account(idx, constraints, name="...")] attributes for Shank
+        let account_attrs: Vec<proc_macro2::TokenStream> = accounts.iter().enumerate().map(|(idx, (acc_name, is_signer, is_writable, _is_program))| {
+            let mut constraints = Vec::new();
+            if *is_writable { constraints.push(quote! { writable }); }
+            if *is_signer { constraints.push(quote! { signer }); }
+
+            let idx_lit = syn::LitInt::new(&idx.to_string(), proc_macro2::Span::call_site());
+            let name_lit = syn::LitStr::new(acc_name, proc_macro2::Span::call_site());
+
+            if constraints.is_empty() {
+                quote! { #[account(#idx_lit, name = #name_lit)] }
+            } else {
+                quote! { #[account(#idx_lit, #(#constraints),*, name = #name_lit)] }
+            }
+        }).collect();
+
+        quote! {
+            #(#account_attrs)*
+            #name = #disc
+        }
     });
 
     let expanded = quote! {
@@ -746,10 +803,10 @@ fn analyze_field_type(ty: &Type) -> (bool, bool, bool, usize) {
 
 /// Attribute macro for account structs.
 ///
-/// Adds `#[repr(C)]`, `#[derive(Clone, Copy, Pod, Zeroable)]`, and optionally
+/// Adds `#[repr(C)]`, `#[derive(Clone, Copy)]`, unsafe Pod/Zeroable impls, and optionally
 /// `#[derive(ShankAccount)]` (when `shank` feature is enabled).
 ///
-/// Use this for account structs that already have a discriminator field defined.
+/// Uses unsafe impl for Pod/Zeroable to support structs with manually-verified padding.
 ///
 /// # Example
 ///
@@ -771,7 +828,7 @@ pub fn account(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let fields = match &input.fields {
         Fields::Named(fields_named) => &fields_named.named,
-        _ => panic!("shank_account only supports structs with named fields"),
+        _ => panic!("account macro only supports structs with named fields"),
     };
 
     let field_defs = fields.iter().map(|f| {
@@ -787,12 +844,16 @@ pub fn account(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         #[repr(C)]
-        #[derive(Clone, Copy, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+        #[derive(Clone, Copy)]
         #[cfg_attr(feature = "shank", derive(::shank::ShankAccount))]
         #(#attrs)*
         #vis struct #name #generics {
             #(#field_defs),*
         }
+
+        // Safety: Struct is #[repr(C)] - caller ensures no uninitialized padding
+        unsafe impl ::bytemuck::Pod for #name {}
+        unsafe impl ::bytemuck::Zeroable for #name {}
     };
 
     TokenStream::from(expanded)
