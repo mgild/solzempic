@@ -6,11 +6,10 @@
 
 use core::marker::PhantomData;
 
-use braid_types::AccountType;
 use pinocchio::{error::ProgramError, AccountView};
 use solana_address::{Address, address_eq};
 
-use crate::{create_pda_account, Framework, Initializable, Loadable, SYSTEM_PROGRAM_ID};
+use crate::{check_discriminator, create_pda_account, Framework, Initializable, Loadable, SYSTEM_PROGRAM_ID};
 
 use super::traits::AsAccountRef;
 
@@ -160,7 +159,7 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
             return Err(crate::errors::invalid_account_data());
         }
 
-        if !AccountType::check(data, T::DISCRIMINATOR) {
+        if !check_discriminator(data, T::DISCRIMINATOR) {
             return Err(crate::errors::invalid_account_data());
         }
 

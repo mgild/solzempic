@@ -136,6 +136,7 @@
 
 mod account;
 pub mod programs;
+mod traits;
 mod wrappers;
 
 pub use account::{create_pda_account, rent_exempt_minimum, transfer_lamports, LAMPORTS_PER_BYTE, MAX_ACCOUNT_SIZE};
@@ -164,8 +165,8 @@ pub use programs::{
 };
 pub use wrappers::{AccountRef, AccountRefMut, AsAccountRef, ShardRefContext};
 
-// Re-export traits from braid-types
-pub use braid_types::{Initializable, Loadable};
+// Re-export core traits
+pub use traits::{check_discriminator, Initializable, Loadable};
 
 // Re-export derive macros
 pub use solzempic_macros::{Account, SolzempicEntrypoint, account, instruction};

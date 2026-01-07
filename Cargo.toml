@@ -31,10 +31,7 @@ quote = "1"
 syn = { version = "2", features = ["full"] }
 
 # Internal
-solzempic-macros = { path = "solzempic-macros" }
-
-# External (from braid-paper - path dependency for now)
-braid-types = { path = "/Users/mgild/papers/braid-paper/program/braid-types" }
+solzempic-macros = { version = "0.1.0", path = "solzempic-macros" }
 
 [profile.release]
 overflow-checks = true

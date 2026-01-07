@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="Solzempic Logo" width="200">
+</p>
+
 # Solzempic
 
 A lightweight, zero-overhead framework for building Solana programs with [Pinocchio](https://github.com/anza-xyz/pinocchio).
@@ -132,17 +136,23 @@ This single attribute generates:
 use bytemuck::{Pod, Zeroable};
 use solzempic::Loadable;
 
+// Define your account type discriminators
+solzempic::define_account_types! {
+    Counter = 1,
+    User = 2,
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct Counter {
-    pub discriminator: [u8; 8],
+    pub discriminator: u8,
+    pub _padding: [u8; 7],
     pub owner: Pubkey,
     pub count: u64,
 }
 
 impl Loadable for Counter {
-    const DISCRIMINATOR: AccountType = AccountType::Counter; // Your enum
-    const LEN: usize = core::mem::size_of::<Self>();
+    const DISCRIMINATOR: u8 = AccountType::Counter as u8;
 }
 ```
 
@@ -528,8 +538,8 @@ Typical instruction overhead:
 | `Instruction` | Three-phase pattern: `build()` → `validate()` → `execute()` |
 | `InstructionParams` | Associates a params type with an instruction |
 | `Framework` | Program-specific configuration (program ID) |
-| `Loadable` | POD types with discriminator (from braid-types) |
-| `Initializable` | Types that can be initialized (from braid-types) |
+| `Loadable` | POD types with discriminator byte |
+| `Initializable` | Types that can be initialized with params |
 | `ValidatedAccount` | Common interface for validated wrappers |
 
 ### Utility Functions
