@@ -1,0 +1,45 @@
+[workspace]
+members = ["solzempic", "solzempic-macros"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["DoctorBlocks <mitch@switchboard.xyz>"]
+repository = "https://github.com/mgild/solzempic"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ["cfg(target_os, values(\"solana\"))"] }
+
+[workspace.lints.clippy]
+mut_from_ref = "allow"  # Solana AccountInfo has interior mutability
+too_many_arguments = "allow"  # Structural requirement for Solana instructions
+
+[workspace.dependencies]
+# Solana / Pinocchio
+pinocchio = { version = "=0.10", features = ["cpi", "copy"] }
+pinocchio-pubkey = "0.3"
+solana-address = { version = "2.0", features = ["bytemuck", "syscalls", "curve25519"] }
+
+# Utilities
+bytemuck = { version = "1.14", features = ["derive", "min_const_generics"] }
+
+# Proc macro deps
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full"] }
+
+# Internal
+solzempic-macros = { path = "solzempic-macros" }
+
+# External (from braid-paper - path dependency for now)
+braid-types = { path = "/Users/mgild/papers/braid-paper/program/braid-types" }
+
+[profile.release]
+overflow-checks = true
+strip = true
+opt-level = "z"
+lto = true
+panic = "abort"
+codegen-units = 1

@@ -84,7 +84,7 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, Expr, Lit, ItemImpl, ImplItem};
+use syn::{parse_macro_input, Data, DeriveInput, Fields, Expr, Lit, ItemImpl, ImplItem, ItemStruct, Type};
 
 /// Attribute macro for complete Solana program setup.
 ///
@@ -220,6 +220,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
 
         #(#attrs)*
         #[repr(u8)]
+        #[cfg_attr(feature = "shank", derive(::shank::ShankInstruction))]
         #vis enum #enum_name {
             #(#variant_defs),*
         }
@@ -371,12 +372,21 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
 /// # Panics
 ///
 /// Compile-time panics if:
-/// - No params type provided in attribute
-/// - Applied to a non-struct impl block
+/// - No params type provided in attribute (for impl blocks)
+/// - Applied to non-struct/non-impl
 #[proc_macro_attribute]
 pub fn instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
+    // Try to parse as struct first, then as impl block
+    let item_clone = item.clone();
+
+    if let Ok(input) = syn::parse::<ItemStruct>(item_clone) {
+        // It's a struct - generate Shank account metadata
+        return instruction_struct_impl(attr, input);
+    }
+
+    // Otherwise treat as impl block
     let params_type: syn::Path = syn::parse(attr)
-        .expect("instruction macro requires params type, e.g. #[instruction(MyParams)]");
+        .expect("instruction macro on impl requires params type, e.g. #[instruction(MyParams)]");
     let input = parse_macro_input!(item as ItemImpl);
 
     // Extract the struct name from the impl
@@ -404,6 +414,117 @@ pub fn instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         impl<'a> ::solzempic::Instruction<'a> for #struct_name<'a> {
             #(#methods)*
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+/// Internal implementation for instruction struct
+fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream {
+    let struct_name = &input.ident;
+    let vis = &input.vis;
+    let attrs = &input.attrs;
+    let generics = &input.generics;
+
+    // Parse optional starting index from attribute (defaults to 0)
+    let start_index: usize = if attr.is_empty() {
+        0
+    } else {
+        syn::parse::<syn::LitInt>(attr)
+            .map(|lit| lit.base10_parse::<usize>().unwrap_or(0))
+            .unwrap_or(0)
+    };
+
+    let fields = match &input.fields {
+        Fields::Named(fields_named) => &fields_named.named,
+        _ => panic!("instruction macro on struct only supports named fields"),
+    };
+
+    // Analyze each field and determine account constraints
+    let mut account_metas: Vec<proc_macro2::TokenStream> = Vec::new();
+    let mut shank_attr_strings: Vec<String> = Vec::new();
+    let mut current_idx = start_index;
+
+    for field in fields.iter() {
+        let field_name = field.ident.as_ref().expect("Named field required");
+        let field_name_str = field_name.to_string();
+        let field_ty = &field.ty;
+
+        let (is_signer, is_writable, is_program, expand_count) = analyze_field_type(field_ty);
+
+        if expand_count > 1 {
+            let shard_names = ["left_shard", "current_shard", "right_shard"];
+            for (i, shard_name) in shard_names.iter().enumerate() {
+                let idx = current_idx + i;
+                account_metas.push(quote! {
+                    ::solzempic::ShankAccountMeta {
+                        index: #idx,
+                        name: #shard_name,
+                        is_signer: false,
+                        is_writable: true,
+                        is_program: false,
+                    }
+                });
+                shank_attr_strings.push(format!("#[account({}, writable, name=\"{}\")]", idx, shard_name));
+            }
+            current_idx += expand_count;
+        } else {
+            let mut constraints = Vec::new();
+            if is_writable { constraints.push("writable"); }
+            if is_signer { constraints.push("signer"); }
+
+            let constraints_str = if constraints.is_empty() {
+                String::new()
+            } else {
+                format!(", {}", constraints.join(", "))
+            };
+
+            shank_attr_strings.push(format!("#[account({}{}, name=\"{}\")]", current_idx, constraints_str, field_name_str));
+
+            account_metas.push(quote! {
+                ::solzempic::ShankAccountMeta {
+                    index: #current_idx,
+                    name: #field_name_str,
+                    is_signer: #is_signer,
+                    is_writable: #is_writable,
+                    is_program: #is_program,
+                }
+            });
+            current_idx += 1;
+        }
+    }
+
+    let num_accounts = account_metas.len();
+    let shank_output = shank_attr_strings.join("\n    ");
+
+    let field_defs = fields.iter().map(|f| {
+        let field_name = &f.ident;
+        let field_ty = &f.ty;
+        let field_vis = &f.vis;
+        let field_attrs = &f.attrs;
+        quote! {
+            #(#field_attrs)*
+            #field_vis #field_name: #field_ty
+        }
+    });
+
+    let expanded = quote! {
+        #(#attrs)*
+        #vis struct #struct_name #generics {
+            #(#field_defs),*
+        }
+
+        impl #struct_name<'_> {
+            pub const NUM_ACCOUNTS: usize = #num_accounts;
+
+            pub const SHANK_ACCOUNTS: [::solzempic::ShankAccountMeta; #num_accounts] = [
+                #(#account_metas),*
+            ];
+
+            pub fn shank_accounts() -> &'static str {
+                #shank_output
+            }
         }
     };
 
@@ -551,14 +672,126 @@ pub fn derive_account(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         #[repr(C)]
         #[derive(Clone, Copy, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+        #[cfg_attr(feature = "shank", derive(::shank::ShankAccount))]
         #vis struct #name {
+            /// Account discriminator (8 bytes)
             pub discriminator: [u8; 8],
             #(#field_defs),*
         }
 
-        impl ::braid_types::Loadable for #name {
-            const DISCRIMINATOR: ::braid_types::AccountType =
-                unsafe { ::core::mem::transmute::<u8, ::braid_types::AccountType>(#discriminator) };
+        impl #name {
+            /// The discriminator value for this account type.
+            pub const DISCRIMINATOR: u8 = #discriminator;
+
+            /// The discriminator as an 8-byte array.
+            pub const DISCRIMINATOR_BYTES: [u8; 8] = [#discriminator, 0, 0, 0, 0, 0, 0, 0];
+
+            /// Check if data has the correct discriminator.
+            #[inline]
+            pub fn check_discriminator(data: &[u8]) -> bool {
+                !data.is_empty() && data[0] == #discriminator
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+/// Analyzes a field type to determine Shank constraints.
+/// Returns (is_signer, is_writable, is_program, expand_count)
+fn analyze_field_type(ty: &Type) -> (bool, bool, bool, usize) {
+    match ty {
+        Type::Path(type_path) => {
+            if let Some(segment) = type_path.path.segments.last() {
+                let type_name = segment.ident.to_string();
+                match type_name.as_str() {
+                    // Signer types
+                    "Signer" => (true, false, false, 1),
+                    "MutSigner" => (true, true, false, 1),  // signer + writable
+
+                    // Writable account types
+                    "AccountRefMut" => (false, true, false, 1),
+                    "TokenAccountRefMut" => (false, true, false, 1),
+                    "Writable" => (false, true, false, 1),
+
+                    // Readonly account types
+                    "AccountRef" => (false, false, false, 1),
+                    "TokenAccountRef" => (false, false, false, 1),
+                    "Mint" => (false, false, false, 1),
+                    "ValidatedAccount" => (false, false, false, 1),
+                    "ReadOnly" => (false, false, false, 1),
+
+                    // Program types
+                    "SystemProgram" => (false, false, true, 1),
+                    "TokenProgram" => (false, false, true, 1),
+                    "AtaProgram" => (false, false, true, 1),
+                    "Token2022Program" => (false, false, true, 1),
+
+                    // Shard context expands to 3 accounts
+                    "ShardRefContext" => (false, true, false, 3),
+
+                    _ => (false, false, false, 1),
+                }
+            } else {
+                (false, false, false, 1)
+            }
+        }
+        Type::Reference(_) => {
+            // &'a AccountView - default to readonly (use Writable<'a> for writable)
+            (false, false, false, 1)
+        }
+        _ => (false, false, false, 1),
+    }
+}
+
+/// Attribute macro for account structs.
+///
+/// Adds `#[repr(C)]`, `#[derive(Clone, Copy, Pod, Zeroable)]`, and optionally
+/// `#[derive(ShankAccount)]` (when `shank` feature is enabled).
+///
+/// Use this for account structs that already have a discriminator field defined.
+///
+/// # Example
+///
+/// ```ignore
+/// #[account]
+/// pub struct Market {
+///     pub discriminator: [u8; 8],
+///     pub admin: Pubkey,
+///     // ...
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn account(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemStruct);
+    let name = &input.ident;
+    let vis = &input.vis;
+    let attrs = &input.attrs;
+    let generics = &input.generics;
+
+    let fields = match &input.fields {
+        Fields::Named(fields_named) => &fields_named.named,
+        _ => panic!("shank_account only supports structs with named fields"),
+    };
+
+    let field_defs = fields.iter().map(|f| {
+        let field_name = &f.ident;
+        let field_ty = &f.ty;
+        let field_vis = &f.vis;
+        let field_attrs = &f.attrs;
+        quote! {
+            #(#field_attrs)*
+            #field_vis #field_name: #field_ty
+        }
+    });
+
+    let expanded = quote! {
+        #[repr(C)]
+        #[derive(Clone, Copy, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+        #[cfg_attr(feature = "shank", derive(::shank::ShankAccount))]
+        #(#attrs)*
+        #vis struct #name #generics {
+            #(#field_defs),*
         }
     };
 

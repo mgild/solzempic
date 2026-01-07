@@ -93,6 +93,20 @@ impl<'a> ValidatedAccount<'a> for Signer<'a> {
     }
 }
 
+impl<'a> Signer<'a> {
+    /// Returns the account's public key.
+    #[inline]
+    pub fn address(&self) -> &solana_address::Address {
+        self.info.address()
+    }
+
+    /// Alias for address() - returns the account's public key.
+    #[inline]
+    pub fn key(&self) -> &solana_address::Address {
+        self.info.address()
+    }
+}
+
 /// Type alias for payer accounts.
 ///
 /// `Payer` is semantically identical to [`Signer`], but signals that
@@ -116,3 +130,167 @@ impl<'a> ValidatedAccount<'a> for Signer<'a> {
 /// This is purely a semantic distinction. Both types perform the same
 /// `is_signer()` validation.
 pub type Payer<'a> = Signer<'a>;
+
+/// Validated signer account wrapper that is also writable.
+///
+/// `MutSigner` wraps an AccountInfo that has been validated to have signed
+/// the transaction AND be writable. Use this when the signer's account data
+/// or lamports will be modified (e.g., the payer paying for rent).
+///
+/// # Example
+///
+/// ```ignore
+/// use solzempic::{ValidatedAccount, MutSigner};
+///
+/// pub struct CloseAccount<'a> {
+///     pub owner: MutSigner<'a>,  // Signer + receives lamports back
+///     pub account_to_close: AccountRefMut<'a, MyAccount>,
+/// }
+/// ```
+///
+/// # Shank IDL
+///
+/// In Shank IDL generation, `MutSigner` produces `signer, writable` constraints.
+pub struct MutSigner<'a> {
+    info: &'a AccountView,
+}
+
+impl<'a> ValidatedAccount<'a> for MutSigner<'a> {
+    /// Validate that the account has signed the transaction and is writable.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProgramError::MissingRequiredSignature`] if not a signer.
+    /// Returns [`ProgramError::InvalidAccountData`] if not writable.
+    #[inline]
+    fn wrap(info: &'a AccountView) -> Result<Self, ProgramError> {
+        if !info.is_signer() {
+            return Err(ProgramError::MissingRequiredSignature);
+        }
+        if !info.is_writable() {
+            return Err(ProgramError::InvalidAccountData);
+        }
+        Ok(Self { info })
+    }
+
+    #[inline]
+    fn info(&self) -> &'a AccountView {
+        self.info
+    }
+}
+
+impl<'a> MutSigner<'a> {
+    /// Returns the account's public key.
+    #[inline]
+    pub fn address(&self) -> &solana_address::Address {
+        self.info.address()
+    }
+
+    /// Alias for address() - returns the account's public key.
+    #[inline]
+    pub fn key(&self) -> &solana_address::Address {
+        self.info.address()
+    }
+}
+
+/// Explicit wrapper for writable raw account references.
+///
+/// Use `Writable` when you have a raw `&AccountView` that needs to be
+/// marked as writable for Shank IDL generation.
+///
+/// # Example
+///
+/// ```ignore
+/// pub struct MyInstruction<'a> {
+///     pub target: Writable<'a>,  // Writable raw account
+/// }
+/// ```
+///
+/// # Shank IDL
+///
+/// In Shank IDL generation, `Writable` produces a `writable` constraint.
+pub struct Writable<'a> {
+    info: &'a AccountView,
+}
+
+impl<'a> ValidatedAccount<'a> for Writable<'a> {
+    /// Validate that the account is writable.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProgramError::InvalidAccountData`] if not writable.
+    #[inline]
+    fn wrap(info: &'a AccountView) -> Result<Self, ProgramError> {
+        if !info.is_writable() {
+            return Err(ProgramError::InvalidAccountData);
+        }
+        Ok(Self { info })
+    }
+
+    #[inline]
+    fn info(&self) -> &'a AccountView {
+        self.info
+    }
+}
+
+impl<'a> Writable<'a> {
+    /// Returns the account's public key.
+    #[inline]
+    pub fn address(&self) -> &solana_address::Address {
+        self.info.address()
+    }
+
+    /// Alias for address() - returns the account's public key.
+    #[inline]
+    pub fn key(&self) -> &solana_address::Address {
+        self.info.address()
+    }
+}
+
+/// Explicit wrapper for readonly raw account references.
+///
+/// Use `ReadOnly` when you have a raw `&AccountView` that should be
+/// explicitly marked as readonly for Shank IDL generation. This is
+/// the same as a bare `&AccountView` reference but makes the intent clearer.
+///
+/// # Example
+///
+/// ```ignore
+/// pub struct MyInstruction<'a> {
+///     pub config: ReadOnly<'a>,  // Readonly raw account
+/// }
+/// ```
+///
+/// # Shank IDL
+///
+/// In Shank IDL generation, `ReadOnly` produces no writable constraint (readonly).
+pub struct ReadOnly<'a> {
+    info: &'a AccountView,
+}
+
+impl<'a> ValidatedAccount<'a> for ReadOnly<'a> {
+    /// Wraps the account reference (no validation needed for readonly).
+    #[inline]
+    fn wrap(info: &'a AccountView) -> Result<Self, ProgramError> {
+        Ok(Self { info })
+    }
+
+    #[inline]
+    fn info(&self) -> &'a AccountView {
+        self.info
+    }
+}
+
+impl<'a> ReadOnly<'a> {
+    /// Returns the account's public key.
+    #[inline]
+    pub fn address(&self) -> &solana_address::Address {
+        self.info.address()
+    }
+
+    /// Alias for address() - returns the account's public key.
+    #[inline]
+    pub fn key(&self) -> &solana_address::Address {
+        self.info.address()
+    }
+}

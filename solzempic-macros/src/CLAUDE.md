@@ -7,5 +7,8 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #386 | 2:37 PM | 🔄 | Cleaned Up Unused Imports in solzempic-macros | ~165 |
+| #380 | 2:35 PM | 🟣 | Added MutSigner Type to Solzempic Macro Type Analysis | ~218 |
+| #370 | 2:28 PM | 🔄 | Solzempic Macros Extended with Additional Syn Types | ~197 |
 | #363 | 2:13 PM | 🟣 | SolzempicEntrypoint Macro Now Generates Entrypoint Automatically | ~245 |
 </claude-mem-context>

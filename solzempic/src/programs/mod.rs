@@ -40,7 +40,7 @@ pub use alt::AltProgram;
 pub use ata::AtaProgram;
 pub use lut::Lut;
 pub use mint::Mint;
-pub use signer::{Payer, Signer};
+pub use signer::{MutSigner, Payer, ReadOnly, Signer, Writable};
 pub use system::SystemProgram;
 pub use sysvars::{ClockSysvar, InstructionsSysvar, RecentBlockhashesSysvar, RentSysvar, SlotHashesSysvar};
 pub use token_account::{TokenAccountData, TokenAccountRefMut};
