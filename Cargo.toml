@@ -3,7 +3,7 @@ members = ["solzempic", "solzempic-macros"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT"
 authors = ["DoctorBlocks <mitch@switchboard.xyz>"]
