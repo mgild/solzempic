@@ -360,6 +360,99 @@ Common use cases for shard contexts:
 - **Linked lists**: Insertions/deletions update prev/next pointers
 - **Rebalancing**: Moving data between under/over-utilized shards
 
+### PDA (Program Derived Address) Support
+
+Solzempic provides comprehensive PDA support through the account wrappers:
+
+#### Validating PDAs
+
+Both `AccountRef` and `AccountRefMut` implement the `is_pda()` method via the `AsAccountRef` trait:
+
+```rust
+let seeds = &[b"user", owner.key().as_ref()];
+let (is_valid, bump) = account.is_pda(seeds);
+
+if !is_valid {
+    return Err(ProgramError::InvalidSeeds);
+}
+
+// Store bump for later use in CPI signing
+let full_seeds = &[b"user", owner.key().as_ref(), &[bump]];
+```
+
+**Performance note**: PDA derivation costs ~2000 CUs. If you validate frequently, consider storing the bump in your account data and using a simple key comparison instead.
+
+#### Creating PDA Accounts
+
+Use `AccountRefMut::init_pda()` to create and initialize a PDA in one operation:
+
+```rust
+// Derive PDA and get bump
+let (_, bump) = Pubkey::find_program_address(
+    &[b"market", base_mint.as_ref(), quote_mint.as_ref()],
+    &program_id,
+);
+
+// Include bump in seeds
+let seeds: &[&[u8]] = &[
+    b"market",
+    base_mint.as_ref(),
+    quote_mint.as_ref(),
+    &[bump],
+];
+
+// Create PDA and initialize with discriminator
+let mut market: AccountRefMut<Market> = AccountRefMut::init_pda(
+    market_account,
+    payer.info(),
+    system_program.info(),
+    seeds,
+    Market::LEN,
+)?;
+
+// Set initial values
+market.get_mut().admin = *admin.key();
+```
+
+For lower-level control, use the `create_pda_account()` function:
+
+```rust
+use solzempic::create_pda_account;
+
+// Create without initialization
+create_pda_account(payer, new_account, &program_id, space, seeds)?;
+```
+
+#### The `AsAccountRef` Trait
+
+The `AsAccountRef` trait provides a common interface for PDA validation on both read-only and writable accounts:
+
+```rust
+pub trait AsAccountRef<'a, T: Loadable, F: Framework> {
+    fn info(&self) -> &'a AccountView;
+    fn address(&self) -> &Address;
+    fn get(&self) -> &T;
+    fn is_pda(&self, seeds: &[&[u8]]) -> (bool, u8);
+}
+```
+
+This allows generic code to work with either `AccountRef` or `AccountRefMut`:
+
+```rust
+fn validate_pda<'a, T, F, A>(account: &A, seeds: &[&[u8]]) -> ProgramResult
+where
+    T: Loadable,
+    F: Framework,
+    A: AsAccountRef<'a, T, F>,
+{
+    let (is_valid, _bump) = account.is_pda(seeds);
+    if !is_valid {
+        return Err(ProgramError::InvalidSeeds);
+    }
+    Ok(())
+}
+```
+
 ### Validated Program Wrappers
 
 All program and sysvar accounts validate their identity on construction:
@@ -557,6 +650,7 @@ Typical instruction overhead:
 | `Loadable` | POD types with discriminator byte |
 | `Initializable` | Marker trait for types that can be initialized |
 | `ValidatedAccount` | Common interface for validated wrappers |
+| `AsAccountRef` | Common interface for account wrappers (PDA validation, data access) |
 
 ### Utility Functions
 
