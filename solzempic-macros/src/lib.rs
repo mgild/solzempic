@@ -903,6 +903,8 @@ pub fn account(attr: TokenStream, item: TokenStream) -> TokenStream {
                 const DISCRIMINATOR: u8 = #disc as u8;
             }
 
+            impl ::solzempic::Initializable for #name {}
+
             #account_impl
         }
     });
