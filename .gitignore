@@ -18,3 +18,6 @@ Thumbs.db
 
 # Build artifacts
 **/*.rs.bk
+
+# Claude
+**/CLAUDE.md

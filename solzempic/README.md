@@ -125,7 +125,7 @@ pub enum MyInstruction {
 
 This single attribute generates:
 - `ID: Pubkey` constant and `id() -> &'static Pubkey` function
-- `AccountRef<'a, T>`, `AccountRefMut<'a, T>`, `ShardRefContext<'a, T>` type aliases
+- `AccountRef<'a, T>`, `AccountRefMut<'a, T>`, `ShardRefContext<'a, T>`, `ShardRefMutContext<'a, T>` type aliases
 - `#[repr(u8)]` on the enum
 - `TryFrom<u8>` and dispatch methods
 - The program entrypoint
@@ -316,23 +316,50 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
 }
 ```
 
-#### `ShardRefContext<T>` - Triplet Navigation
+#### `ShardRefContext<T>` - Read-Only Triplet Navigation
 
-For sharded data structures that need access to prev/current/next:
+For sharded data structures that need read-only access to prev/current/next:
 
 ```rust
 pub struct ShardRefContext<'a, T: Loadable, F: Framework> {
+    pub prev: AccountRef<'a, T, F>,
+    pub current: AccountRef<'a, T, F>,
+    pub next: AccountRef<'a, T, F>,
+}
+
+impl<'a, T: Loadable, F: Framework> ShardRefContext<'a, T, F> {
+    pub fn new(prev: &'a AccountInfo, current: &'a AccountInfo, next: &'a AccountInfo) -> Result<Self, ProgramError>;
+    pub fn current(&self) -> &T;
+    pub fn prev(&self) -> &T;
+    pub fn next(&self) -> &T;
+}
+```
+
+#### `ShardRefMutContext<T>` - Mutable Triplet Navigation
+
+For sharded data structures that need mutable access to prev/current/next:
+
+```rust
+pub struct ShardRefMutContext<'a, T: Loadable, F: Framework> {
     pub prev: AccountRefMut<'a, T, F>,
     pub current: AccountRefMut<'a, T, F>,
     pub next: AccountRefMut<'a, T, F>,
 }
 
-impl<'a, T: Loadable, F: Framework> ShardRefContext<'a, T, F> {
+impl<'a, T: Loadable, F: Framework> ShardRefMutContext<'a, T, F> {
     pub fn new(prev: &'a AccountInfo, current: &'a AccountInfo, next: &'a AccountInfo) -> Result<Self, ProgramError>;
+    pub fn from_loaded(prev: AccountRefMut, current: AccountRefMut, next: AccountRefMut) -> Self;
     pub fn current_mut(&mut self) -> &mut T;
+    pub fn prev_mut(&mut self) -> &mut T;
+    pub fn next_mut(&mut self) -> &mut T;
     pub fn all_mut(&mut self) -> (&mut T, &mut T, &mut T);
 }
 ```
+
+Common use cases for shard contexts:
+- **Orderbooks**: Orders may need to move between price-range shards
+- **Linked lists**: Insertions/deletions update prev/next pointers
+- **Rebalancing**: Moving data between under/over-utilized shards
 
 ### Validated Program Wrappers
 
@@ -397,6 +424,7 @@ pub enum MyInstruction {
 // - pub type AccountRef<'a, T> = ...
 // - pub type AccountRefMut<'a, T> = ...
 // - pub type ShardRefContext<'a, T> = ...
+// - pub type ShardRefMutContext<'a, T> = ...
 // - #[repr(u8)] on the enum
 // - TryFrom<u8> for MyInstruction
 // - MyInstruction::process() dispatch method
@@ -482,7 +510,8 @@ Typical instruction overhead:
 |------|---------|
 | `AccountRef<'a, T>` | Read-only typed account with ownership validation |
 | `AccountRefMut<'a, T>` | Writable typed account with ownership + is_writable checks |
-| `ShardRefContext<'a, T>` | Prev/current/next triplet for sharded data structures |
+| `ShardRefContext<'a, T>` | Read-only prev/current/next triplet for sharded data |
+| `ShardRefMutContext<'a, T>` | Mutable prev/current/next triplet for sharded data |
 
 ### Program Wrappers
 
