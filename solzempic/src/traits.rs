@@ -120,50 +120,35 @@ pub trait Loadable: Pod + Sized {
     const LEN: usize = core::mem::size_of::<Self>();
 }
 
-/// Trait for types that can be initialized with params.
+/// Marker trait for types that can be initialized.
 ///
-/// Implement this for account types that need initialization logic
-/// beyond just zeroing the memory.
+/// Types implementing this trait can be initialized via `AccountRefMut::init()`.
+/// Initialization writes the discriminator byte and zeros the rest of the account.
 ///
 /// # Example
 ///
 /// ```ignore
 /// use solzempic::{Loadable, Initializable};
 ///
-/// pub struct CounterParams {
+/// #[repr(C)]
+/// #[derive(Clone, Copy, Pod, Zeroable)]
+/// pub struct Counter {
+///     pub discriminator: u8,
+///     pub _padding: [u8; 7],
 ///     pub owner: [u8; 32],
-///     pub initial_count: u64,
+///     pub count: u64,
 /// }
 ///
-/// impl Initializable for Counter {
-///     type InitParams = CounterParams;
-///
-///     fn init(data: &mut [u8], params: Self::InitParams) -> Result<(), ProgramError> {
-///         if data.len() < Self::LEN {
-///             return Err(ProgramError::InvalidAccountData);
-///         }
-///
-///         let counter: &mut Counter = bytemuck::from_bytes_mut(&mut data[..Self::LEN]);
-///         counter.discriminator = Self::DISCRIMINATOR;
-///         counter.owner = params.owner;
-///         counter.count = params.initial_count;
-///
-///         Ok(())
-///     }
+/// impl Loadable for Counter {
+///     const DISCRIMINATOR: u8 = 1;
 /// }
+///
+/// impl Initializable for Counter {}
 /// ```
-pub trait Initializable: Loadable {
-    /// Parameters needed to initialize this account type.
-    type InitParams;
-
-    /// Initialize account data with the given params.
-    ///
-    /// This should:
-    /// 1. Validate the data slice is large enough
-    /// 2. Write the discriminator byte
-    /// 3. Initialize all fields from params
-    fn init(data: &mut [u8], params: Self::InitParams) -> Result<(), ProgramError>;
-}
+///
+/// After calling `AccountRefMut::init()`, the account will have the discriminator
+/// set and all other fields zeroed. You can then set fields via `get_mut()`.
+pub trait Initializable: Loadable {}
 
 /// Check if account data has the expected discriminator.
 ///

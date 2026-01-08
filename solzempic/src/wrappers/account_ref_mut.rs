@@ -295,8 +295,9 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
 impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
     /// Initialize an uninitialized account and wrap it.
     ///
-    /// This method writes the type's discriminator and initial data to an
-    /// uninitialized account, then returns a wrapper for the initialized account.
+    /// This method writes the type's discriminator to an uninitialized account,
+    /// then returns a wrapper for the initialized account. All other bytes
+    /// remain zeroed.
     ///
     /// # Preconditions
     ///
@@ -307,21 +308,19 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
     /// # Arguments
     ///
     /// * `info` - The uninitialized account to initialize
-    /// * `params` - Initialization parameters (type-specific)
     ///
     /// # Errors
     ///
-    /// * [`ProgramError::InvalidAccountData`] - Account not writable
+    /// * [`ProgramError::InvalidAccountData`] - Account not writable or too small
     /// * [`ProgramError::AccountAlreadyInitialized`] - Account already has data
     ///
     /// # Example
     ///
     /// ```ignore
     /// // Account was created with sufficient space beforehand
-    /// let mut counter: AccountRefMut<Counter> = AccountRefMut::init(
-    ///     &accounts[0],
-    ///     CounterParams { owner: *owner.key(), initial_count: 0 },
-    /// )?;
+    /// let mut counter: AccountRefMut<Counter> = AccountRefMut::init(&accounts[0])?;
+    /// counter.get_mut().owner = *owner.key();
+    /// counter.get_mut().count = 0;
     /// ```
     ///
     /// # See Also
@@ -329,7 +328,7 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
     /// - [`init_pda`](Self::init_pda) - Create and initialize PDA in one call
     /// - [`init_if_needed`](Self::init_if_needed) - Idempotent initialization
     #[inline]
-    pub fn init(info: &'a AccountView, params: T::InitParams) -> Result<Self, ProgramError> {
+    pub fn init(info: &'a AccountView) -> Result<Self, ProgramError> {
         if !info.is_writable() {
             return Err(crate::errors::account_not_writable());
         }
@@ -337,7 +336,11 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
             return Err(crate::errors::account_already_initialized());
         }
         let data = unsafe { info.borrow_unchecked_mut() };
-        T::init(data, params)?;
+        if data.len() < T::LEN {
+            return Err(crate::errors::invalid_account_data());
+        }
+        // Write discriminator byte
+        data[0] = T::DISCRIMINATOR;
         Self::load_unchecked(info)
     }
 
@@ -356,36 +359,33 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
     /// # Arguments
     ///
     /// * `info` - The account to initialize or load
-    /// * `params` - Initialization parameters (only used if account is uninitialized)
     ///
     /// # Errors
     ///
-    /// * [`ProgramError::InvalidAccountData`] - Account not writable
+    /// * [`ProgramError::InvalidAccountData`] - Account not writable or too small
     /// * [`ProgramError::InvalidAccountData`] - Data too small or wrong discriminator (if already init)
     ///
     /// # Example
     ///
     /// ```ignore
     /// // Safe to call even if user already has an account
-    /// let mut user: AccountRefMut<User> = AccountRefMut::init_if_needed(
-    ///     user_account,
-    ///     UserParams { owner: *owner.key() },
-    /// )?;
+    /// let mut user: AccountRefMut<User> = AccountRefMut::init_if_needed(user_account)?;
+    /// if user.get().owner == [0u8; 32] {
+    ///     user.get_mut().owner = *owner.key();
+    /// }
     /// ```
-    ///
-    /// # Note
-    ///
-    /// The `params` are ignored if the account is already initialized. Make sure
-    /// your initialization parameters are deterministic, or use [`init`](Self::init)
-    /// for stricter control.
     #[inline]
-    pub fn init_if_needed(info: &'a AccountView, params: T::InitParams) -> Result<Self, ProgramError> {
+    pub fn init_if_needed(info: &'a AccountView) -> Result<Self, ProgramError> {
         if !info.is_writable() {
             return Err(crate::errors::account_not_writable());
         }
         if Self::is_uninit(info) {
             let data = unsafe { info.borrow_unchecked_mut() };
-            T::init(data, params)?;
+            if data.len() < T::LEN {
+                return Err(crate::errors::invalid_account_data());
+            }
+            // Write discriminator byte
+            data[0] = T::DISCRIMINATOR;
         }
         Self::load_unchecked(info)
     }
@@ -403,7 +403,6 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
     /// * `system_program` - The System program (kept for API compatibility)
     /// * `seeds` - The PDA seeds **including the bump seed**
     /// * `space` - The space to allocate (should be `T::LEN` or larger)
-    /// * `params` - Initialization parameters for the account data
     ///
     /// # Errors
     ///
@@ -432,8 +431,9 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
     ///     system_program.info(),
     ///     seeds,
     ///     Market::LEN,
-    ///     MarketParams { base_mint: *base_mint, quote_mint: *quote_mint },
     /// )?;
+    /// market.get_mut().base_mint = *base_mint;
+    /// market.get_mut().quote_mint = *quote_mint;
     /// ```
     ///
     /// # Performance
@@ -451,7 +451,6 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
         system_program: &AccountView,
         seeds: &[&[u8]],
         space: usize,
-        params: T::InitParams,
     ) -> Result<Self, ProgramError> {
         if !info.is_writable() {
             return Err(crate::errors::account_not_writable());
@@ -462,9 +461,9 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
         let _ = system_program;
         create_pda_account(payer, info, &F::PROGRAM_ID, space, seeds)?;
 
-        // Initialize the account data
+        // Initialize: write discriminator byte
         let data = unsafe { info.borrow_unchecked_mut() };
-        T::init(data, params)?;
+        data[0] = T::DISCRIMINATOR;
         Self::load_unchecked(info)
     }
 }

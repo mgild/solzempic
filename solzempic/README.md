@@ -298,11 +298,11 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
 }
 
 impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
-    /// Initialize a new account
-    pub fn init(info: &'a AccountInfo, params: T::InitParams) -> Result<Self, ProgramError>;
+    /// Initialize a new account (writes discriminator, zeros rest)
+    pub fn init(info: &'a AccountInfo) -> Result<Self, ProgramError>;
 
     /// Initialize if uninitialized, otherwise load
-    pub fn init_if_needed(info: &'a AccountInfo, params: T::InitParams) -> Result<Self, ProgramError>;
+    pub fn init_if_needed(info: &'a AccountInfo) -> Result<Self, ProgramError>;
 
     /// Initialize a PDA account (create via CPI + initialize)
     pub fn init_pda(
@@ -311,7 +311,6 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
         system_program: &AccountInfo,
         seeds: &[&[u8]],
         space: usize,
-        params: T::InitParams,
     ) -> Result<Self, ProgramError>;
 }
 ```
@@ -556,7 +555,7 @@ Typical instruction overhead:
 | `InstructionParams` | Associates a params type with an instruction |
 | `Framework` | Program-specific configuration (program ID) |
 | `Loadable` | POD types with discriminator byte |
-| `Initializable` | Types that can be initialized with params |
+| `Initializable` | Marker trait for types that can be initialized |
 | `ValidatedAccount` | Common interface for validated wrappers |
 
 ### Utility Functions
