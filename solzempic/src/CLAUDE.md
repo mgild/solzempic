@@ -11,4 +11,12 @@
 | #400 | 2:43 PM | 🔄 | Renamed shank_account macro to account in solzempic exports | ~241 |
 | #373 | 2:30 PM | 🟣 | ShankAccountMeta Struct Added to Solzempic | ~300 |
 | #372 | " | 🟣 | Added instruction_struct macro re-export to solzempic | ~205 |
+
+### Jan 8, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #500 | 8:37 AM | ✅ | ShardRefMutContext added to solzempic define_framework macro documentation | ~163 |
+| #497 | " | 🟣 | ShardRefMutContext Added to Solzempic Exports | ~183 |
+| #496 | 8:36 AM | 🔵 | Solzempic Framework Architecture and Core Types | ~294 |
 </claude-mem-context>

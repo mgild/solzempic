@@ -10,7 +10,8 @@
 //! |------|---------|-----------|
 //! | [`AccountRef<T, F>`] | Read-only access | Owner, discriminator, size |
 //! | [`AccountRefMut<T, F>`] | Writable access | Owner, discriminator, size, `is_writable` |
-//! | [`ShardRefContext<T, F>`] | Shard triplet | All three accounts loaded as `AccountRefMut` |
+//! | [`ShardRefContext<T, F>`] | Read-only shard triplet | All three accounts loaded as `AccountRef` |
+//! | [`ShardRefMutContext<T, F>`] | Writable shard triplet | All three accounts loaded as `AccountRefMut` |
 //!
 //! # The Framework Pattern
 //!
@@ -68,9 +69,11 @@
 mod account_ref;
 mod account_ref_mut;
 mod shard_ref_context;
+mod shard_ref_mut_context;
 mod traits;
 
 pub use account_ref::AccountRef;
 pub use account_ref_mut::AccountRefMut;
 pub use shard_ref_context::ShardRefContext;
+pub use shard_ref_mut_context::ShardRefMutContext;
 pub use traits::AsAccountRef;

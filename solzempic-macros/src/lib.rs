@@ -58,7 +58,8 @@
 //! - `Solzempic` - Framework type implementing `Framework` trait
 //! - `AccountRef<'a, T>` - Type alias for read-only accounts
 //! - `AccountRefMut<'a, T>` - Type alias for writable accounts
-//! - `ShardRefContext<'a, T>` - Type alias for shard triplets
+//! - `ShardRefContext<'a, T>` - Type alias for read-only shard triplets
+//! - `ShardRefMutContext<'a, T>` - Type alias for writable shard triplets
 //! - `id()` - Returns `&'static Pubkey`
 //! - `TryFrom<u8>` - Discriminator parsing
 //! - `dispatch()` - Handler dispatch (after enum construction)
@@ -100,7 +101,8 @@ use syn::{parse_macro_input, Data, DeriveInput, Fields, Expr, Lit, ItemImpl, Imp
 /// | `Solzempic` | `struct` | Framework type implementing `Framework` trait |
 /// | `AccountRef<'a, T>` | `type` | Read-only account wrapper alias |
 /// | `AccountRefMut<'a, T>` | `type` | Writable account wrapper alias |
-/// | `ShardRefContext<'a, T>` | `type` | Shard triplet context alias |
+/// | `ShardRefContext<'a, T>` | `type` | Read-only shard triplet context alias |
+/// | `ShardRefMutContext<'a, T>` | `type` | Writable shard triplet context alias |
 /// | `id()` | `fn` | Returns `&'static Pubkey` |
 /// | `process_instruction` | `fn` | Program entrypoint handler |
 /// | `entrypoint!` | macro | Registers the entrypoint (unless `no-entrypoint` feature) |
@@ -266,8 +268,11 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         /// Writable account wrapper with ownership validation.
         pub type AccountRefMut<'a, T> = ::solzempic::AccountRefMut<'a, T, Solzempic>;
 
-        /// Context for sharded data structures.
+        /// Read-only context for sharded data structures.
         pub type ShardRefContext<'a, T> = ::solzempic::ShardRefContext<'a, T, Solzempic>;
+
+        /// Writable context for sharded data structures.
+        pub type ShardRefMutContext<'a, T> = ::solzempic::ShardRefMutContext<'a, T, Solzempic>;
 
         /// Returns the program ID.
         #[inline]
@@ -789,7 +794,8 @@ fn analyze_field_type(ty: &Type) -> (bool, bool, bool, usize) {
                     "Token2022Program" => (false, false, true, 1),
 
                     // Shard context expands to 3 accounts
-                    "ShardRefContext" => (false, true, false, 3),
+                    "ShardRefContext" => (false, false, false, 3),  // read-only
+                    "ShardRefMutContext" => (false, true, false, 3),  // writable
 
                     _ => (false, false, false, 1),
                 }

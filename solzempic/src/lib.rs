@@ -31,7 +31,8 @@
 //!
 //! - [`AccountRef<T>`]: Read-only typed access with ownership validation
 //! - [`AccountRefMut<T>`]: Writable typed access with ownership + is_writable checks
-//! - [`ShardRefContext<T>`]: Navigation context for sharded data structures
+//! - [`ShardRefContext<T>`]: Read-only navigation context for sharded data structures
+//! - [`ShardRefMutContext<T>`]: Writable navigation context for sharded data structures
 //!
 //! ### Program Wrappers
 //!
@@ -60,7 +61,7 @@
 //! This single attribute generates:
 //! - `ID: Pubkey` constant
 //! - `id() -> &'static Pubkey` function
-//! - `AccountRef<'a, T>`, `AccountRefMut<'a, T>`, `ShardRefContext<'a, T>` type aliases
+//! - `AccountRef<'a, T>`, `AccountRefMut<'a, T>`, `ShardRefContext<'a, T>`, `ShardRefMutContext<'a, T>` type aliases
 //! - `#[repr(u8)]` on the enum
 //! - `TryFrom<u8>` and dispatch methods
 //!
@@ -163,7 +164,7 @@ pub use programs::{
     validate_token_program, validate_system_program, validate_clock_sysvar,
     validate_slot_hashes_sysvar, validate_rent_sysvar,
 };
-pub use wrappers::{AccountRef, AccountRefMut, AsAccountRef, ShardRefContext};
+pub use wrappers::{AccountRef, AccountRefMut, AsAccountRef, ShardRefContext, ShardRefMutContext};
 
 // Re-export core traits
 pub use traits::{check_discriminator, Account, Initializable, Loadable};
@@ -563,6 +564,7 @@ extern crate alloc;
 /// - `AccountRef<'a, T>`: Type alias for [`AccountRef`]`<'a, T, Solzempic>`
 /// - `AccountRefMut<'a, T>`: Type alias for [`AccountRefMut`]`<'a, T, Solzempic>`
 /// - `ShardRefContext<'a, T>`: Type alias for [`ShardRefContext`]`<'a, T, Solzempic>`
+/// - `ShardRefMutContext<'a, T>`: Type alias for [`ShardRefMutContext`]`<'a, T, Solzempic>`
 ///
 /// # Example
 ///
@@ -612,12 +614,18 @@ macro_rules! define_framework {
         /// and `is_writable` flag validated.
         pub type AccountRefMut<'a, T> = $crate::AccountRefMut<'a, T, Solzempic>;
 
-        /// Context holding AccountRefMuts for prev, current, and next shards.
+        /// Context holding read-only AccountRefs for prev, current, and next shards.
         ///
         /// This is a type alias for [`solzempic::ShardRefContext`] with your program's
-        /// framework baked in. Use this for sharded data structures that need access
-        /// to neighboring shards for rebalancing or traversal.
+        /// framework baked in. Use this for read-only access to sharded data structures.
         pub type ShardRefContext<'a, T> = $crate::ShardRefContext<'a, T, Solzempic>;
+
+        /// Context holding writable AccountRefMuts for prev, current, and next shards.
+        ///
+        /// This is a type alias for [`solzempic::ShardRefMutContext`] with your program's
+        /// framework baked in. Use this for sharded data structures that need mutable
+        /// access to neighboring shards for rebalancing or traversal.
+        pub type ShardRefMutContext<'a, T> = $crate::ShardRefMutContext<'a, T, Solzempic>;
 
         /// Returns the program ID.
         #[inline]
