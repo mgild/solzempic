@@ -45,7 +45,7 @@ Solzempic provides **just enough structure** to eliminate boilerplate while main
 - **Type-safe account wrappers**: `AccountRef<T>`, `AccountRefMut<T>` with ownership validation
 - **Program-specific Framework trait**: Configure your program ID once, use everywhere
 - **Validated program accounts**: `SystemProgram`, `TokenProgram`, `Signer` etc. with compile-time guarantees
-- **Derive macros**: `#[SolzempicInstruction]` and `#[derive(SolzempicDispatch)]` for ergonomic dispatch
+- **Derive macros**: `#[instruction]` and `#[SolzempicEntrypoint]` for ergonomic dispatch
 - **`no_std` compatible**: Works in constrained Solana runtime environment
 
 ## Architecture Overview
@@ -90,7 +90,7 @@ Solzempic provides **just enough structure** to eliminate boilerplate while main
                    │  SystemProgram  │   TokenProgram  │    Signer       │   Sysvars    │
                    │  AtaProgram     │   Mint          │    Payer        │   Clock      │
                    │  AltProgram     │   TokenAccount  │                 │   Rent       │
-                   │  Lut            │   Vault         │                 │   SlotHashes │
+                   │  Lut            │                 │                 │   SlotHashes │
                    └─────────────────┴─────────────────┴─────────────────┴──────────────┘
 ```
 
@@ -354,7 +354,7 @@ let rent = RentSysvar::wrap(&accounts[6])?;           // Validates Rent sysvar I
 
 // Token accounts
 let mint = Mint::wrap(&accounts[7])?;                 // Validates token program ownership
-let vault = Vault::wrap(&accounts[8], &authority)?;   // Validates ownership + authority
+let token = TokenAccountRefMut::load(&accounts[8])?;   // Validates token account
 let token_account = TokenAccountRefMut::load(&accounts[9])?;
 ```
 
@@ -506,9 +506,7 @@ Typical instruction overhead:
 | Type | Purpose |
 |------|---------|
 | `Mint` | SPL Token mint account |
-| `Vault` | Token account with authority validation |
-| `SolVault` | SOL vault (system-owned) |
-| `TokenAccountRefMut` | Writable token account |
+| `TokenAccountRefMut` | Writable token account with utility methods |
 | `TokenAccountData` | Token account data struct |
 
 ### Sysvar Wrappers
