@@ -51,47 +51,47 @@ Solzempic provides **just enough structure** to eliminate boilerplate while main
 ## Architecture Overview
 
 ```
-                          ┌─────────────────────────────────────────────────────────────┐
-                          │                    SOLZEMPIC FRAMEWORK                       │
-                          └─────────────────────────────────────────────────────────────┘
-                                                       │
-                          ┌────────────────────────────┼────────────────────────────┐
-                          │                            │                            │
-                          ▼                            ▼                            ▼
-                   ┌──────────────┐            ┌──────────────┐            ┌──────────────┐
-                   │  Framework   │            │    Action    │            │   Account    │
-                   │    Trait     │            │   Pattern    │            │   Wrappers   │
-                   └──────────────┘            └──────────────┘            └──────────────┘
-                          │                            │                            │
-                          │                    ┌───────┴───────┐                    │
-                          ▼                    ▼               ▼                    ▼
-                   ┌──────────────┐    ┌──────────────┐ ┌──────────────┐    ┌──────────────┐
-                   │ define_     │    │    build()   │ │  validate()  │    │  AccountRef  │
-                   │ framework!  │    │              │ │              │    │ AccountRefMut│
-                   │             │    │ Accounts +   │ │ Invariants   │    │ ShardRef-    │
-                   │ Creates:    │    │ params from  │ │ PDA checks   │    │ Context      │
-                   │ - Solzempic │    │ raw bytes    │ │ Ownership    │    └──────────────┘
-                   │ - AccountRef│    └──────────────┘ └──────────────┘            │
-                   │ - AccountRef│            │               │                    │
-                   │   Mut       │            └───────┬───────┘                    │
-                   └──────────────┘                   │                            │
-                          │                           ▼                            │
-                          │                    ┌──────────────┐                    │
-                          │                    │  execute()   │◄───────────────────┘
-                          │                    │              │
-                          └───────────────────►│ State changes│
-                                               │ CPI calls    │
-                                               │ Token xfers  │
-                                               └──────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    SOLZEMPIC FRAMEWORK                       │
+└─────────────────────────────────────────────────────────────┘
+                             │
+┌────────────────────────────┼────────────────────────────┐
+│                            │                            │
+▼                            ▼                            ▼
+┌──────────────┐      ┌──────────────┐      ┌──────────────┐
+│  Framework   │      │    Action    │      │   Account    │
+│    Trait     │      │   Pattern    │      │   Wrappers   │
+└──────────────┘      └──────────────┘      └──────────────┘
+      │                      │                      │
+      │              ┌───────┴───────┐              │
+      ▼              ▼               ▼              ▼
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│ define_      │ │    build()   │ │  validate()  │ │  AccountRef  │
+│ framework!   │ │              │ │              │ │ AccountRefMut│
+│              │ │ Accounts +   │ │ Invariants   │ │ ShardRef-    │
+│ Creates:     │ │ params from  │ │ PDA checks   │ │ Context      │
+│ - Solzempic  │ │ raw bytes    │ │ Ownership    │ └──────────────┘
+│ - AccountRef │ └──────────────┘ └──────────────┘        │
+│ - AccountRef │        │               │                 │
+│   Mut        │        └───────┬───────┘                 │
+└──────────────┘                │                         │
+      │                         ▼                         │
+      │                  ┌──────────────┐                 │
+      │                  │  execute()   │◄────────────────┘
+      │                  │              │
+      └─────────────────►│ State changes│
+                         │ CPI calls    │
+                         │ Token xfers  │
+                         └──────────────┘
 
-                   ┌─────────────────────────────────────────────────────────────────────┐
-                   │                         PROGRAM WRAPPERS                            │
-                   ├─────────────────┬─────────────────┬─────────────────┬──────────────┤
-                   │  SystemProgram  │   TokenProgram  │    Signer       │   Sysvars    │
-                   │  AtaProgram     │   Mint          │    Payer        │   Clock      │
-                   │  AltProgram     │   TokenAccount  │                 │   Rent       │
-                   │  Lut            │                 │                 │   SlotHashes │
-                   └─────────────────┴─────────────────┴─────────────────┴──────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                         PROGRAM WRAPPERS                            │
+├─────────────────┬─────────────────┬─────────────────┬──────────────┤
+│  SystemProgram  │   TokenProgram  │    Signer       │   Sysvars    │
+│  AtaProgram     │   Mint          │    Payer        │   Clock      │
+│  AltProgram     │   TokenAccount  │                 │   Rent       │
+│  Lut            │                 │                 │   SlotHashes │
+└─────────────────┴─────────────────┴─────────────────┴──────────────┘
 ```
 
 ## Installation

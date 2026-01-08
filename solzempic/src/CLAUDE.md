@@ -16,6 +16,7 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #529 | 8:49 AM | ⚖️ | InitParams removed from solzempic framework | ~230 |
 | #500 | 8:37 AM | ✅ | ShardRefMutContext added to solzempic define_framework macro documentation | ~163 |
 | #497 | " | 🟣 | ShardRefMutContext Added to Solzempic Exports | ~183 |
 | #496 | 8:36 AM | 🔵 | Solzempic Framework Architecture and Core Types | ~294 |
