@@ -147,7 +147,7 @@ pub use programs::{
     // IDs
     SYSTEM_PROGRAM_ID, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
     ADDRESS_LOOKUP_TABLE_PROGRAM_ID, CLOCK_SYSVAR_ID, RENT_SYSVAR_ID, SLOT_HASHES_SYSVAR_ID,
-    INSTRUCTIONS_SYSVAR_ID, RECENT_BLOCKHASHES_SYSVAR_ID,
+    INSTRUCTIONS_SYSVAR_ID, RECENT_BLOCKHASHES_SYSVAR_ID, LAST_RESTART_SLOT_SYSVAR_ID,
     // Traits
     ValidatedAccount,
     // Program wrappers
@@ -158,6 +158,7 @@ pub use programs::{
     Writable, ReadOnly,
     // Sysvars
     ClockSysvar, RentSysvar, SlotHashesSysvar, InstructionsSysvar, RecentBlockhashesSysvar,
+    LastRestartSlotSysvar, LastRestartSlot,
     // Token
     Mint, TokenAccountData, TokenAccountRefMut, Vault, SolVault,
     // Validation

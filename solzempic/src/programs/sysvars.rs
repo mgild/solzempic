@@ -114,3 +114,59 @@ define_sysvar!(
     RECENT_BLOCKHASHES_SYSVAR_ID,
     "Validated RecentBlockhashes sysvar account.\n\n**Deprecated**: Use Clock or SlotHashes instead.\nPreviously provided recent blockhashes for nonce-based replay protection."
 );
+
+define_sysvar!(
+    LastRestartSlotSysvar,
+    LAST_RESTART_SLOT_SYSVAR_ID,
+    "Validated LastRestartSlot sysvar account.\n\nProvides the slot number of the last cluster restart (hard fork), or 0 if none.\nUseful for DeFi protocols to detect stale oracle prices after a cluster restart."
+);
+
+/// LastRestartSlot sysvar data structure.
+///
+/// Contains the slot number of the last restart (hard fork), or 0 if none ever happened.
+/// This information helps DeFi protocols prevent arbitrage and liquidation caused by
+/// outdated oracle price account states after a cluster restart.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct LastRestartSlot {
+    /// The slot number of the last restart, or 0 if none.
+    pub last_restart_slot: u64,
+}
+
+impl<'a> LastRestartSlotSysvar<'a> {
+    /// Get the LastRestartSlot data from this sysvar account.
+    ///
+    /// Reads the u64 value directly from account data.
+    #[inline]
+    pub fn get(&self) -> Result<LastRestartSlot, ProgramError> {
+        let data = unsafe { self.info.borrow_unchecked() };
+        if data.len() < 8 {
+            return Err(ProgramError::InvalidAccountData);
+        }
+        let last_restart_slot = u64::from_le_bytes(data[0..8].try_into().unwrap());
+        Ok(LastRestartSlot { last_restart_slot })
+    }
+
+    /// Get the last restart slot directly via syscall (no account needed).
+    ///
+    /// This is more efficient than passing the sysvar account.
+    #[inline]
+    pub fn get_via_syscall() -> Result<LastRestartSlot, ProgramError> {
+        let mut var = core::mem::MaybeUninit::<LastRestartSlot>::uninit();
+        let var_addr = var.as_mut_ptr() as *mut u8;
+
+        #[cfg(target_os = "solana")]
+        let result = unsafe { pinocchio::syscalls::sol_get_last_restart_slot(var_addr) };
+
+        #[cfg(not(target_os = "solana"))]
+        let result = {
+            let _ = var_addr;
+            0u64 // Return success for non-solana targets
+        };
+
+        match result {
+            0 => Ok(unsafe { var.assume_init() }),
+            _ => Err(ProgramError::UnsupportedSysvar),
+        }
+    }
+}

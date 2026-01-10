@@ -201,3 +201,16 @@ pub const INSTRUCTIONS_SYSVAR_ID: Address =
 /// Address: `SysvarRecentB1ockHashes11111111111111111111`
 pub const RECENT_BLOCKHASHES_SYSVAR_ID: Address =
     Address::new_from_array(pinocchio_pubkey::pubkey!("SysvarRecentB1ockHashes11111111111111111111"));
+
+/// The LastRestartSlot sysvar address.
+///
+/// The LastRestartSlot sysvar provides information about the last cluster restart:
+/// - `last_restart_slot`: Slot number of the last restart (hard fork), or 0 if none
+///
+/// This is useful for DeFi protocols to detect stale oracle prices after a
+/// cluster restart, helping prevent arbitrage and liquidation issues caused
+/// by outdated state.
+///
+/// Address: `SysvarLastRestartS1ot1111111111111111111111`
+pub const LAST_RESTART_SLOT_SYSVAR_ID: Address =
+    Address::new_from_array(pinocchio_pubkey::pubkey!("SysvarLastRestartS1ot1111111111111111111111"));

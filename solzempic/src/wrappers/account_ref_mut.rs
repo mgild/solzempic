@@ -216,6 +216,33 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
         bytemuck::from_bytes_mut(&mut self.data[..T::LEN])
     }
 
+    /// Get the full account data slice.
+    ///
+    /// Returns an immutable reference to the complete account data, not just
+    /// the `T::LEN` portion. Useful for accounts with variable-length data
+    /// beyond the header.
+    #[inline]
+    pub fn data(&self) -> &[u8] {
+        self.data
+    }
+
+    /// Get the full account data slice mutably.
+    ///
+    /// Returns a mutable reference to the complete account data. Useful for
+    /// accounts with variable-length data (like order arrays) that need to
+    /// create views spanning header + data.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // For accounts with variable-length orders after the header
+    /// let mut orders = OrdersView::from_account(account.data_mut()).unwrap();
+    /// ```
+    #[inline]
+    pub fn data_mut(&mut self) -> &mut [u8] {
+        self.data
+    }
+
     /// Reload data reference after CPI.
     ///
     /// After any CPI that might modify this account's data, call this method

@@ -42,7 +42,7 @@ pub use lut::Lut;
 pub use mint::Mint;
 pub use signer::{MutSigner, Payer, ReadOnly, Signer, Writable};
 pub use system::SystemProgram;
-pub use sysvars::{ClockSysvar, InstructionsSysvar, RecentBlockhashesSysvar, RentSysvar, SlotHashesSysvar};
+pub use sysvars::{ClockSysvar, InstructionsSysvar, LastRestartSlot, LastRestartSlotSysvar, RecentBlockhashesSysvar, RentSysvar, SlotHashesSysvar};
 pub use token_account::{TokenAccountData, TokenAccountRefMut};
 pub use token_program::TokenProgram;
 pub use traits::ValidatedAccount;
