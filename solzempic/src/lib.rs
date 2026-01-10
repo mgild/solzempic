@@ -365,13 +365,13 @@ pub trait Instruction<'a>: InstructionParams + Sized {
     fn validate(&self, program_id: &Address, params: &Self::Params) -> ProgramResult;
 
     /// Execute the instruction and perform state changes.
-    fn execute(&self, program_id: &Address, params: &Self::Params) -> ProgramResult;
+    fn execute(&mut self, program_id: &Address, params: &Self::Params) -> ProgramResult;
 
     /// Process the instruction (parse params -> build context -> validate -> execute).
     #[inline(never)]
     fn process(program_id: &Address, accounts: &'a [AccountView], data: &[u8]) -> ProgramResult {
         let params = parse_params::<Self::Params>(data)?;
-        let ctx = Self::build(accounts, &params)?;
+        let mut ctx = Self::build(accounts, &params)?;
         ctx.validate(program_id, &params)?;
         ctx.execute(program_id, &params)
     }

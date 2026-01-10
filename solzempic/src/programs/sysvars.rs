@@ -83,6 +83,14 @@ define_sysvar!(
     "Validated Clock sysvar account.\n\nProvides current slot, epoch, and Unix timestamp.\nUse for time-based logic like order expiration."
 );
 
+impl<'a> ClockSysvar<'a> {
+    /// Get the Clock struct from this sysvar.
+    #[inline]
+    pub fn get(&self) -> Result<pinocchio::account::Ref<'a, pinocchio::sysvars::clock::Clock>, ProgramError> {
+        pinocchio::sysvars::clock::Clock::from_account_view(self.info)
+    }
+}
+
 define_sysvar!(
     RentSysvar,
     RENT_SYSVAR_ID,

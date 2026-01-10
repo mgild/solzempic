@@ -16,6 +16,7 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #832 | 12:35 PM | 🔄 | Moved create_pda_account from solzempic re-export to local implementation | ~363 |
 | #529 | 8:49 AM | ⚖️ | InitParams removed from solzempic framework | ~230 |
 | #500 | 8:37 AM | ✅ | ShardRefMutContext added to solzempic define_framework macro documentation | ~163 |
 | #497 | " | 🟣 | ShardRefMutContext Added to Solzempic Exports | ~183 |
