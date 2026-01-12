@@ -45,7 +45,7 @@ Solzempic provides **just enough structure** to eliminate boilerplate while main
 - **Type-safe account wrappers**: `AccountRef<T>`, `AccountRefMut<T>` with ownership validation
 - **Program-specific Framework trait**: Configure your program ID once, use everywhere
 - **Validated program accounts**: `SystemProgram`, `TokenProgram`, `Signer` etc. with compile-time guarantees
-- **Derive macros**: `#[instruction]`, `#[params]`, and `#[SolzempicEntrypoint]` for ergonomic dispatch
+- **Attribute macros**: `#[instruction]`, `#[params]`, and `#[SolzempicEntrypoint]` for ergonomic dispatch
 - **IDL generation**: Generate Anchor-compatible IDL from Rust decorators for SDK generation
 - **`no_std` compatible**: Works in constrained Solana runtime environment
 
@@ -90,8 +90,8 @@ Solzempic provides **just enough structure** to eliminate boilerplate while main
 ├─────────────────┬─────────────────┬─────────────────┬──────────────┤
 │  SystemProgram  │   TokenProgram  │    Signer       │   Sysvars    │
 │  AtaProgram     │   Mint          │    Payer        │   Clock      │
-│  AltProgram     │   TokenAccount  │                 │   Rent       │
-│  Lut            │                 │                 │   SlotHashes │
+│  AltProgram     │   TokenAccount  │    MutSigner    │   Rent       │
+│  Lut            │   Vault         │                 │   SlotHashes │
 └─────────────────┴─────────────────┴─────────────────┴──────────────┘
 ```
 
@@ -526,7 +526,7 @@ pub enum MyInstruction {
 
 #### `#[instruction(ParamsType)]`
 
-Implements the `Instruction` trait on an impl block:
+Implements the `InstructionParams` and `Instruction` traits on an impl block:
 
 ```rust
 pub struct Transfer<'a> {
@@ -543,6 +543,7 @@ impl<'a> Transfer<'a> {
 }
 
 // Generates InstructionParams and Instruction trait implementations
+// Also generates IDL_NAME and IDL_PARAMS constants for IDL generation
 ```
 
 #### `#[params]`
@@ -697,8 +698,8 @@ cargo run --bin gen_idl --features idl > idl.json
 #### How It Works
 
 - `#[params]` generates `ParamsMeta` impl with field names and types
-- `#[instruction]` on struct definitions generates `SHANK_ACCOUNTS` metadata
-- `#[instruction]` on impl blocks generates `IDL_NAME` and `IDL_PARAMS` constants
+- `#[instruction]` on struct definitions generates `NUM_ACCOUNTS`, `SHANK_ACCOUNTS`, and `shank_accounts()`
+- `#[instruction]` on impl blocks generates `InstructionParams`, `Instruction` traits, plus `IDL_NAME` and `IDL_PARAMS`
 - `#[SolzempicEntrypoint]` aggregates all instructions into `IDL_INSTRUCTIONS` (when `idl` feature enabled)
 
 The generated IDL is compatible with Anchor's format and can be consumed by Codama for SDK generation.
@@ -792,8 +793,9 @@ Typical instruction overhead:
 | Macro | Purpose |
 |-------|---------|
 | `#[SolzempicEntrypoint("...")]` | Main entrypoint - generates ID, type aliases, dispatch, entrypoint, and `IDL_INSTRUCTIONS` |
-| `#[instruction(Params)]` | Implements `Instruction` trait and generates IDL metadata |
-| `#[instruction]` (on struct) | Generates `SHANK_ACCOUNTS` metadata for IDL |
+| `#[account(discriminator = ...)]` | Account struct with `#[repr(C)]`, Pod/Zeroable, and `Loadable` impl |
+| `#[instruction(Params)]` | Implements `InstructionParams` + `Instruction` traits and IDL constants |
+| `#[instruction]` (on struct) | Generates `NUM_ACCOUNTS`, `SHANK_ACCOUNTS`, and `shank_accounts()` for IDL |
 | `#[params]` | Defines instruction params with `#[repr(C)]`, Pod/Zeroable, and `ParamsMeta` |
 | `define_framework!(ID)` | Alternative: manually define framework type aliases |
 | `define_account_types! { ... }` | Define account discriminator enum |
@@ -806,6 +808,8 @@ Typical instruction overhead:
 | `AccountRefMut<'a, T>` | Writable typed account with ownership + is_writable checks |
 | `ShardRefContext<'a, T>` | Read-only prev/current/next triplet for sharded data |
 | `ShardRefMutContext<'a, T>` | Mutable prev/current/next triplet for sharded data |
+| `Writable<'a>` | Raw AccountView wrapper that validates is_writable |
+| `ReadOnly<'a>` | Raw AccountView wrapper (semantic marker, no validation) |
 
 ### Program Wrappers
 
@@ -823,6 +827,7 @@ Typical instruction overhead:
 |------|-----------|
 | `Signer` | `is_signer` flag is true |
 | `Payer` | Alias for `Signer` (semantic clarity) |
+| `MutSigner` | `is_signer` + `is_writable` flags are true |
 
 ### Token Wrappers
 
@@ -831,6 +836,8 @@ Typical instruction overhead:
 | `Mint` | SPL Token mint account |
 | `TokenAccountRefMut` | Writable token account with utility methods |
 | `TokenAccountData` | Token account data struct |
+| `Vault` | SPL Token vault account (ATA owned by PDA) |
+| `SolVault` | SOL-holding account wrapper |
 
 ### Sysvar Wrappers
 
@@ -841,6 +848,7 @@ Typical instruction overhead:
 | `SlotHashesSysvar` | Recent slot hashes |
 | `InstructionsSysvar` | Current transaction instructions |
 | `RecentBlockhashesSysvar` | Recent blockhashes |
+| `LastRestartSlotSysvar` | Last cluster restart slot |
 
 ### Traits
 
@@ -878,6 +886,7 @@ Typical instruction overhead:
 | `SLOT_HASHES_SYSVAR_ID` | SlotHashes sysvar |
 | `INSTRUCTIONS_SYSVAR_ID` | Instructions sysvar |
 | `RECENT_BLOCKHASHES_SYSVAR_ID` | RecentBlockhashes sysvar |
+| `LAST_RESTART_SLOT_SYSVAR_ID` | LastRestartSlot sysvar |
 | `LAMPORTS_PER_BYTE` | Rent cost per byte |
 | `MAX_ACCOUNT_SIZE` | Maximum account size (10MB) |
 
