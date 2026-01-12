@@ -152,12 +152,11 @@ The `#[account(discriminator = N)]` macro automatically:
 Use the `#[instruction]` attribute on an impl block:
 
 ```rust
-use solzempic::{instruction, Signer, ValidatedAccount};
+use solzempic::{instruction, params, Signer, ValidatedAccount};
 use pinocchio::{AccountView, program_error::ProgramError, ProgramResult};
 use solana_address::Address;
 
-#[repr(C)]
-#[derive(Clone, Copy)]
+#[params]
 pub struct IncrementParams {
     pub amount: u64,
 }
