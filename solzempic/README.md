@@ -45,7 +45,8 @@ Solzempic provides **just enough structure** to eliminate boilerplate while main
 - **Type-safe account wrappers**: `AccountRef<T>`, `AccountRefMut<T>` with ownership validation
 - **Program-specific Framework trait**: Configure your program ID once, use everywhere
 - **Validated program accounts**: `SystemProgram`, `TokenProgram`, `Signer` etc. with compile-time guarantees
-- **Derive macros**: `#[instruction]` and `#[SolzempicEntrypoint]` for ergonomic dispatch
+- **Derive macros**: `#[instruction]`, `#[params]`, and `#[SolzempicEntrypoint]` for ergonomic dispatch
+- **IDL generation**: Generate Anchor-compatible IDL from Rust decorators for SDK generation
 - **`no_std` compatible**: Works in constrained Solana runtime environment
 
 ## Architecture Overview
@@ -544,6 +545,203 @@ impl<'a> Transfer<'a> {
 // Generates InstructionParams and Instruction trait implementations
 ```
 
+#### `#[params]`
+
+Defines instruction parameters with automatic IDL metadata generation:
+
+```rust
+use solzempic::params;
+
+#[params]
+pub struct TransferParams {
+    pub amount: u64,
+    pub memo: [u8; 32],
+}
+
+// Generates:
+// - #[repr(C)]
+// - #[derive(Clone, Copy)]
+// - Pod + Zeroable impls
+// - ParamsMeta impl with FIELDS constant for IDL generation
+```
+
+For unit structs (instructions with no parameters):
+
+```rust
+#[params]
+pub struct CloseParams;  // Also works!
+```
+
+### IDL Generation
+
+Solzempic supports generating Anchor-compatible IDL JSON from your Rust code. This enables using tools like [Codama](https://github.com/codama-idl/codama) to generate TypeScript SDKs.
+
+#### Setup
+
+1. Enable the `idl` feature in your program's `Cargo.toml`:
+
+```toml
+[features]
+idl = ["solzempic/idl"]
+
+[[bin]]
+name = "gen_idl"
+path = "src/bin/gen_idl.rs"
+required-features = ["idl"]
+```
+
+2. Use `#[params]` on all parameter structs:
+
+```rust
+#[solzempic::params]
+pub struct MyInstructionParams {
+    pub amount: u64,
+}
+```
+
+3. Add `#[instruction]` to instruction struct definitions:
+
+```rust
+#[instruction]
+pub struct MyInstruction<'a> {
+    pub account: AccountRefMut<'a, MyAccount>,
+    pub signer: Signer<'a>,
+}
+```
+
+4. Create a `gen_idl.rs` binary:
+
+```rust
+//! Generate IDL JSON from Rust instruction metadata.
+//! Run with: cargo run --bin gen_idl --features idl
+
+use my_program::IDL_INSTRUCTIONS;
+
+fn main() {
+    println!("{{");
+    println!("  \"version\": \"0.1.0\",");
+    println!("  \"name\": \"my_program\",");
+    println!("  \"instructions\": [");
+
+    for (i, instr) in IDL_INSTRUCTIONS.iter().enumerate() {
+        let comma = if i < IDL_INSTRUCTIONS.len() - 1 { "," } else { "" };
+        println!("    {{");
+        println!("      \"name\": \"{}\",", to_camel_case(instr.name));
+        println!("      \"discriminator\": {},", instr.discriminator);
+        println!("      \"accounts\": [");
+
+        for (j, acc) in instr.accounts.iter().enumerate() {
+            let acc_comma = if j < instr.accounts.len() - 1 { "," } else { "" };
+            println!("        {{");
+            println!("          \"name\": \"{}\",", acc.name);
+            println!("          \"isMut\": {},", acc.is_writable);
+            println!("          \"isSigner\": {}", acc.is_signer);
+            println!("        }}{}", acc_comma);
+        }
+
+        println!("      ],");
+        println!("      \"args\": [");
+
+        for (k, param) in instr.params.iter().enumerate() {
+            let param_comma = if k < instr.params.len() - 1 { "," } else { "" };
+            let type_json = rust_type_to_idl(param.type_name);
+            println!("        {{");
+            println!("          \"name\": \"{}\",", param.name);
+            println!("          \"type\": {}", type_json);
+            println!("        }}{}", param_comma);
+        }
+
+        println!("      ]");
+        println!("    }}{}", comma);
+    }
+
+    println!("  ]");
+    println!("}}");
+}
+
+fn to_camel_case(s: &str) -> String {
+    let mut result = String::new();
+    let mut first = true;
+    for c in s.chars() {
+        if first {
+            result.push(c.to_ascii_lowercase());
+            first = false;
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+fn rust_type_to_idl(rust_type: &str) -> String {
+    match rust_type {
+        "u8" | "u16" | "u32" | "u64" | "u128" => format!("\"{}\"", rust_type),
+        "i8" | "i16" | "i32" | "i64" | "i128" => format!("\"{}\"", rust_type),
+        "bool" => "\"bool\"".to_string(),
+        "Address" | "Pubkey" => "\"publicKey\"".to_string(),
+        s if s.starts_with("[u8;") => {
+            let len = s.trim_start_matches("[u8;").trim_end_matches(']').trim();
+            format!("{{ \"array\": [\"u8\", {}] }}", len)
+        }
+        _ => format!("\"{}\"", rust_type),
+    }
+}
+```
+
+5. Generate the IDL:
+
+```bash
+cargo run --bin gen_idl --features idl > idl.json
+```
+
+#### How It Works
+
+- `#[params]` generates `ParamsMeta` impl with field names and types
+- `#[instruction]` on struct definitions generates `SHANK_ACCOUNTS` metadata
+- `#[instruction]` on impl blocks generates `IDL_NAME` and `IDL_PARAMS` constants
+- `#[SolzempicEntrypoint]` aggregates all instructions into `IDL_INSTRUCTIONS` (when `idl` feature enabled)
+
+The generated IDL is compatible with Anchor's format and can be consumed by Codama for SDK generation.
+
+#### Limitations
+
+The IDL generation works well for simple programs but has limitations with compound account types:
+
+**Compound types expand to generic names:**
+
+When you use compound types like `ShardRefMutContext<T>`, the macro expands them to their component fields (`prev`, `current`, `next`). These get generic names in the IDL:
+
+```rust
+#[instruction]
+pub struct MyInstruction<'a> {
+    pub shards: ShardRefMutContext<'a, MyHeader>,  // Expands to leftShard, currentShard, rightShard
+}
+```
+
+**Duplicate names with multiple compound fields:**
+
+If an instruction has multiple fields of the same compound type, you get duplicate account names:
+
+```rust
+#[instruction]
+pub struct MatchOrders<'a> {
+    pub clmm_shards: ShardRefMutContext<'a, ClmmHeader>,   // → leftShard, currentShard, rightShard
+    pub limit_shards: ShardRefMutContext<'a, LimitHeader>, // → leftShard, currentShard, rightShard (duplicates!)
+}
+```
+
+The generated IDL would have duplicate `leftShard`, `currentShard`, `rightShard` entries, which breaks SDK generation.
+
+**Recommendations for complex programs:**
+
+For programs with compound account types used multiple times:
+
+1. **Manual IDL**: Write the IDL by hand with unique prefixed names (`clmmShardPrev`, `limitShardPrev`, etc.)
+2. **Post-process**: Generate IDL and manually fix duplicate names
+3. **Separate instructions**: Split into multiple instructions each using one compound type
+
+For simpler programs without these patterns, the automated IDL generation works well.
+
 ## Comparison to Alternatives
 
 ### vs Anchor
@@ -551,9 +749,10 @@ impl<'a> Transfer<'a> {
 | Feature | Anchor | Solzempic |
 |---------|--------|-----------|
 | CU overhead | ~2000-5000 per instruction | ~100 (just your logic) |
-| Binary size | Large (IDL, borsh) | Minimal |
+| Binary size | Large (IDL embedded) | Minimal (IDL generated separately) |
 | Account validation | Automatic, opaque | Explicit, transparent |
 | Serialization | Borsh (copies data) | Zero-copy bytemuck |
+| IDL generation | Built-in | Opt-in via `idl` feature |
 | Learning curve | Low (magic) | Medium (explicit) |
 | Debugging | Hard (generated code) | Easy (your code) |
 | Flexibility | Constrained | Full control |
@@ -566,6 +765,7 @@ impl<'a> Transfer<'a> {
 | Structure | None (DIY) | Action pattern |
 | Safety | Manual | Enforced by types |
 | Program ID handling | Pass everywhere | Framework trait |
+| IDL generation | Manual | Automated from decorators |
 | Learning curve | High | Medium |
 
 ## Performance Characteristics
@@ -591,8 +791,10 @@ Typical instruction overhead:
 
 | Macro | Purpose |
 |-------|---------|
-| `#[SolzempicEntrypoint("...")]` | Main entrypoint - generates ID, type aliases, dispatch, and entrypoint |
-| `#[instruction(Params)]` | Implements `Instruction` trait on an impl block |
+| `#[SolzempicEntrypoint("...")]` | Main entrypoint - generates ID, type aliases, dispatch, entrypoint, and `IDL_INSTRUCTIONS` |
+| `#[instruction(Params)]` | Implements `Instruction` trait and generates IDL metadata |
+| `#[instruction]` (on struct) | Generates `SHANK_ACCOUNTS` metadata for IDL |
+| `#[params]` | Defines instruction params with `#[repr(C)]`, Pod/Zeroable, and `ParamsMeta` |
 | `define_framework!(ID)` | Alternative: manually define framework type aliases |
 | `define_account_types! { ... }` | Define account discriminator enum |
 
@@ -646,6 +848,7 @@ Typical instruction overhead:
 |-------|---------|
 | `Instruction` | Three-phase pattern: `build()` → `validate()` → `execute()` |
 | `InstructionParams` | Associates a params type with an instruction |
+| `ParamsMeta` | Provides `FIELDS` constant for IDL generation |
 | `Framework` | Program-specific configuration (program ID) |
 | `Loadable` | POD types with discriminator byte |
 | `Initializable` | Marker trait for types that can be initialized |

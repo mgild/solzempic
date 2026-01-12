@@ -12,7 +12,6 @@ proc-macro = true
 
 [features]
 default = []
-shank = []
 
 [dependencies]
 proc-macro2.workspace = true

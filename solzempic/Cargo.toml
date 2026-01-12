@@ -9,7 +9,7 @@ description = "Solzempic - Solana instruction framework"
 
 [features]
 default = []
-shank = ["solzempic-macros/shank"]
+idl = []
 
 [lints]
 workspace = true
@@ -20,3 +20,4 @@ pinocchio-pubkey = { workspace = true }
 bytemuck = { workspace = true }
 solzempic-macros = { workspace = true }
 solana-address = { workspace = true }
+shank = "0.4"

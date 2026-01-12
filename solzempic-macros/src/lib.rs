@@ -227,6 +227,18 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         }
     });
 
+    // Generate IDL metadata entries
+    let idl_entries = variant_info.iter().map(|(name, disc, _)| {
+        quote! {
+            ::solzempic::InstructionMeta {
+                name: #name::IDL_NAME,
+                discriminator: #disc,
+                accounts: &#name::SHANK_ACCOUNTS,
+                params: #name::IDL_PARAMS,
+            }
+        }
+    });
+
     // Generate variant definitions for the enum with Shank #[account(...)] attributes
     let variant_defs = variant_info.iter().map(|(name, disc, accounts)| {
         // Generate #[account(idx, constraints, name="...")] attributes for Shank
@@ -282,7 +294,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
 
         #(#attrs)*
         #[repr(u8)]
-        #[cfg_attr(feature = "shank", derive(::shank::ShankInstruction))]
+        #[derive(::solzempic::shank::ShankInstruction)]
         #vis enum #enum_name {
             #(#variant_defs),*
         }
@@ -342,6 +354,12 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         #[cfg(not(feature = "no-entrypoint"))]
         ::pinocchio::entrypoint!(process_instruction);
 
+        /// Get all instruction metadata for IDL generation.
+        /// Returns a static slice of InstructionMeta for each instruction.
+        #[cfg(feature = "idl")]
+        pub const IDL_INSTRUCTIONS: &[::solzempic::InstructionMeta] = &[
+            #(#idl_entries),*
+        ];
     };
 
     TokenStream::from(expanded)
@@ -469,6 +487,8 @@ pub fn instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     }).collect();
 
+    let struct_name_str = struct_name.to_string();
+
     let expanded = quote! {
         impl ::solzempic::InstructionParams for #struct_name<'_> {
             type Params = #params_type;
@@ -476,6 +496,14 @@ pub fn instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         impl<'a> ::solzempic::Instruction<'a> for #struct_name<'a> {
             #(#methods)*
+        }
+
+        impl #struct_name<'_> {
+            /// Instruction name for IDL.
+            pub const IDL_NAME: &'static str = #struct_name_str;
+
+            /// Get params field metadata for IDL generation.
+            pub const IDL_PARAMS: &'static [::solzempic::ParamField] = <#params_type as ::solzempic::ParamsMeta>::FIELDS;
         }
     };
 
@@ -734,7 +762,7 @@ pub fn derive_account(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         #[repr(C)]
         #[derive(Clone, Copy, ::bytemuck::Pod, ::bytemuck::Zeroable)]
-        #[cfg_attr(feature = "shank", derive(::shank::ShankAccount))]
+        #[derive(::solzempic::shank::ShankAccount)]
         #vis struct #name {
             /// Account discriminator (8 bytes)
             pub discriminator: [u8; 8],
@@ -912,7 +940,7 @@ pub fn account(attr: TokenStream, item: TokenStream) -> TokenStream {
     let expanded = quote! {
         #[repr(C)]
         #[derive(Clone, Copy)]
-        #[cfg_attr(feature = "shank", derive(::shank::ShankAccount))]
+        #[derive(::solzempic::shank::ShankAccount)]
         #(#attrs)*
         #vis struct #name #generics {
             #(#field_defs),*
@@ -967,4 +995,132 @@ fn extract_discriminator(attrs: &[syn::Attribute]) -> Option<u8> {
         }
     }
     None
+}
+
+/// Attribute macro for instruction parameter structs.
+///
+/// Generates `impl InstructionParams` with field metadata for IDL generation.
+/// Also adds `#[repr(C)]`, `#[derive(Clone, Copy)]`, and Pod/Zeroable impls.
+///
+/// # Example
+///
+/// ```ignore
+/// #[params]
+/// pub struct CancelClmmPositionParams {
+///     pub order_id: u64,
+///     pub side: u8,
+///     pub _padding: [u8; 7],
+/// }
+///
+/// // Generates:
+/// // impl InstructionParams for CancelClmmPositionParams {
+/// //     const FIELDS: &'static [ParamField] = &[
+/// //         ParamField { name: "order_id", type_name: "u64" },
+/// //         ParamField { name: "side", type_name: "u8" },
+/// //         ParamField { name: "_padding", type_name: "[u8; 7]" },
+/// //     ];
+/// // }
+/// ```
+#[proc_macro_attribute]
+pub fn params(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemStruct);
+    let name = &input.ident;
+    let vis = &input.vis;
+    let attrs = &input.attrs;
+
+    // Handle unit structs (no fields)
+    if matches!(&input.fields, syn::Fields::Unit) {
+        let expanded = quote! {
+            #[repr(C)]
+            #[derive(Clone, Copy)]
+            #(#attrs)*
+            #vis struct #name;
+
+            // Safety: Unit struct is always valid
+            unsafe impl ::bytemuck::Pod for #name {}
+            unsafe impl ::bytemuck::Zeroable for #name {}
+
+            impl ::solzempic::ParamsMeta for #name {
+                const FIELDS: &'static [::solzempic::ParamField] = &[];
+            }
+        };
+        return TokenStream::from(expanded);
+    }
+
+    let fields = match &input.fields {
+        syn::Fields::Named(f) => &f.named,
+        _ => panic!("params macro only supports structs with named fields or unit structs"),
+    };
+
+    // Generate field definitions (preserve original)
+    let field_defs = fields.iter().map(|f| {
+        let field_name = &f.ident;
+        let field_ty = &f.ty;
+        let field_vis = &f.vis;
+        let field_attrs = &f.attrs;
+        quote! {
+            #(#field_attrs)*
+            #field_vis #field_name: #field_ty
+        }
+    });
+
+    // Generate ParamField metadata
+    let param_fields: Vec<_> = fields.iter().map(|f| {
+        let field_name = f.ident.as_ref().expect("Named field required");
+        let field_name_str = field_name.to_string();
+        let type_str = type_to_string(&f.ty);
+        quote! {
+            ::solzempic::ParamField {
+                name: #field_name_str,
+                type_name: #type_str,
+            }
+        }
+    }).collect();
+
+    let expanded = quote! {
+        #[repr(C)]
+        #[derive(Clone, Copy)]
+        #(#attrs)*
+        #vis struct #name {
+            #(#field_defs),*
+        }
+
+        // Safety: Struct is #[repr(C)] with primitive fields
+        unsafe impl ::bytemuck::Pod for #name {}
+        unsafe impl ::bytemuck::Zeroable for #name {}
+
+        impl ::solzempic::ParamsMeta for #name {
+            const FIELDS: &'static [::solzempic::ParamField] = &[
+                #(#param_fields),*
+            ];
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+/// Convert a type to its string representation for IDL.
+fn type_to_string(ty: &Type) -> String {
+    match ty {
+        Type::Path(tp) => {
+            tp.path.segments.iter()
+                .map(|s| s.ident.to_string())
+                .collect::<Vec<_>>()
+                .join("::")
+        }
+        Type::Array(arr) => {
+            let elem = type_to_string(&arr.elem);
+            let len = &arr.len;
+            format!("[{}; {}]", elem, quote!(#len))
+        }
+        Type::Reference(r) => {
+            let inner = type_to_string(&r.elem);
+            if r.mutability.is_some() {
+                format!("&mut {}", inner)
+            } else {
+                format!("&{}", inner)
+            }
+        }
+        _ => quote!(#ty).to_string(),
+    }
 }
