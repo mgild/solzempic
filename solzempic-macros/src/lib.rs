@@ -802,6 +802,7 @@ fn analyze_field_type(ty: &Type) -> (bool, bool, bool, usize) {
                     // Signer types
                     "Signer" => (true, false, false, 1),
                     "MutSigner" => (true, true, false, 1),  // signer + writable
+                    "Payer" => (true, true, false, 1),      // payers are always signer + writable
 
                     // Writable account types
                     "AccountRefMut" => (false, true, false, 1),
@@ -812,13 +813,19 @@ fn analyze_field_type(ty: &Type) -> (bool, bool, bool, usize) {
                     "AccountRef" => (false, false, false, 1),
                     "TokenAccountRef" => (false, false, false, 1),
                     "Mint" => (false, false, false, 1),
+                    "Vault" => (false, false, false, 1),
+                    "SolVault" => (false, false, false, 1),
                     "ValidatedAccount" => (false, false, false, 1),
                     "ReadOnly" => (false, false, false, 1),
+
+                    // Writable specialized types
+                    "Lut" => (false, true, false, 1),  // LUTs are typically created/modified
 
                     // Program types
                     "SystemProgram" => (false, false, true, 1),
                     "TokenProgram" => (false, false, true, 1),
                     "AtaProgram" => (false, false, true, 1),
+                    "AltProgram" => (false, false, true, 1),
                     "Token2022Program" => (false, false, true, 1),
 
                     // Shard context expands to 3 accounts

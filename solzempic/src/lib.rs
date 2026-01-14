@@ -135,10 +135,16 @@
 
 #![no_std]
 
+#[cfg(feature = "idl")]
+extern crate alloc;
+
 mod account;
 pub mod programs;
 pub mod traits;
 mod wrappers;
+
+#[cfg(feature = "idl")]
+pub mod idl;
 
 pub use account::{create_pda_account, rent_exempt_minimum, transfer_lamports, LAMPORTS_PER_BYTE, MAX_ACCOUNT_SIZE};
 
@@ -536,6 +542,7 @@ pub struct ShankAccountMeta {
     pub is_program: bool,
 }
 
+#[cfg(feature = "idl")]
 impl ShankAccountMeta {
     /// Format this account metadata as a Shank `#[account(...)]` attribute.
     pub fn to_shank_attribute(&self) -> alloc::string::String {
@@ -592,8 +599,6 @@ pub trait InstructionIdl {
     /// Get the full instruction metadata.
     fn idl_meta() -> InstructionMeta;
 }
-
-extern crate alloc;
 
 /// Define framework type aliases for account wrappers.
 ///
