@@ -9,7 +9,8 @@ description = "Solzempic - Solana instruction framework"
 
 [features]
 default = []
-idl = []
+std = []
+idl = ["std", "dep:inventory"]
 
 [lints]
 workspace = true
@@ -21,3 +22,4 @@ bytemuck = { workspace = true }
 solzempic-macros = { workspace = true }
 solana-address = { workspace = true }
 shank = "0.4"
+inventory = { version = "0.3", optional = true }

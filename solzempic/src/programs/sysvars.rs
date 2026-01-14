@@ -156,7 +156,14 @@ impl<'a> LastRestartSlotSysvar<'a> {
         let var_addr = var.as_mut_ptr() as *mut u8;
 
         #[cfg(target_os = "solana")]
-        let result = unsafe { pinocchio::syscalls::sol_get_last_restart_slot(var_addr) };
+        let result = unsafe {
+            pinocchio::syscalls::sol_get_sysvar(
+                LAST_RESTART_SLOT_SYSVAR_ID.as_ref().as_ptr(),
+                var_addr,
+                0,  // offset
+                core::mem::size_of::<LastRestartSlot>() as u64,  // length
+            )
+        };
 
         #[cfg(not(target_os = "solana"))]
         let result = {

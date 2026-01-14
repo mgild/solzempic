@@ -599,6 +599,53 @@ pub trait InstructionIdl {
     fn idl_meta() -> InstructionMeta;
 }
 
+// ============================================================================
+// Account Type Metadata (for IDL generation)
+// ============================================================================
+
+/// Metadata for a single field in an account type definition.
+/// Used for generating the "types" section of the IDL.
+#[derive(Clone, Copy, Debug)]
+pub struct FieldMeta {
+    /// Field name.
+    pub name: &'static str,
+    /// Type name (e.g., "u64", "pubkey", "[u8; 8]").
+    pub type_name: &'static str,
+}
+
+/// Metadata for an account type definition.
+/// Used for generating the "accounts" and "types" sections of the IDL.
+#[derive(Clone, Copy, Debug)]
+pub struct AccountTypeMeta {
+    /// Account type name (e.g., "Market", "ProtocolState").
+    pub name: &'static str,
+    /// Discriminator value (first byte of account data).
+    pub discriminator: u8,
+    /// Field metadata slice.
+    pub fields: &'static [FieldMeta],
+}
+
+/// Trait for account types that provide IDL metadata.
+/// Implemented by `#[account]` macro when `idl` feature is enabled.
+pub trait AccountIdlMeta {
+    /// Account type name.
+    const NAME: &'static str;
+    /// Discriminator value.
+    const DISCRIMINATOR: u8;
+    /// Field metadata.
+    const FIELDS: &'static [FieldMeta];
+    /// Complete account type metadata.
+    const META: AccountTypeMeta;
+}
+
+// Re-export inventory for use by generated code
+#[cfg(feature = "idl")]
+pub use inventory;
+
+// Inventory collection for account types
+#[cfg(feature = "idl")]
+inventory::collect!(&'static AccountTypeMeta);
+
 /// Define framework type aliases for account wrappers.
 ///
 /// This macro creates program-specific type aliases that bake in your program ID,

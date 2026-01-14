@@ -916,7 +916,7 @@ pub fn account(attr: TokenStream, item: TokenStream) -> TokenStream {
     });
 
     // Generate Loadable impl if discriminator provided
-    let loadable_impl = discriminator_expr.map(|disc| {
+    let loadable_impl = discriminator_expr.clone().map(|disc| {
         let account_impl = if has_discriminator_field {
             quote! {
                 impl ::solzempic::traits::Account for #name {
@@ -944,6 +944,44 @@ pub fn account(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     });
 
+    // Generate field metadata for IDL
+    let field_metas: Vec<_> = fields.iter().map(|f| {
+        let field_name = f.ident.as_ref().expect("named field").to_string();
+        let field_type = type_to_string(&f.ty);
+        quote! {
+            ::solzempic::FieldMeta {
+                name: #field_name,
+                type_name: #field_type,
+            }
+        }
+    }).collect();
+
+    let name_str = name.to_string();
+
+    // Generate AccountIdlMeta impl if discriminator is provided
+    let idl_meta_impl = discriminator_expr.as_ref().map(|disc| {
+        quote! {
+            impl ::solzempic::AccountIdlMeta for #name {
+                const NAME: &'static str = #name_str;
+                const DISCRIMINATOR: u8 = #disc as u8;
+                const FIELDS: &'static [::solzempic::FieldMeta] = &[
+                    #(#field_metas),*
+                ];
+                const META: ::solzempic::AccountTypeMeta = ::solzempic::AccountTypeMeta {
+                    name: Self::NAME,
+                    discriminator: Self::DISCRIMINATOR,
+                    fields: Self::FIELDS,
+                };
+            }
+
+            // Auto-register with inventory when idl feature is enabled
+            #[cfg(feature = "idl")]
+            ::solzempic::inventory::submit! {
+                &<#name as ::solzempic::AccountIdlMeta>::META
+            }
+        }
+    });
+
     let expanded = quote! {
         #[repr(C)]
         #[derive(Clone, Copy)]
@@ -958,6 +996,8 @@ pub fn account(attr: TokenStream, item: TokenStream) -> TokenStream {
         unsafe impl ::bytemuck::Zeroable for #name {}
 
         #loadable_impl
+
+        #idl_meta_impl
     };
 
     TokenStream::from(expanded)
