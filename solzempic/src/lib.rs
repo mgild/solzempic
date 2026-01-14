@@ -135,7 +135,6 @@
 
 #![no_std]
 
-#[cfg(feature = "idl")]
 extern crate alloc;
 
 mod account;
