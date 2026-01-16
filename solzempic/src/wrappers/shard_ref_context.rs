@@ -1,7 +1,7 @@
 //! Read-only shard reference context for triplet navigation.
 //!
 //! This module provides [`ShardRefContext`], a container for managing three
-//! related shard accounts (previous, current, next) with read-only access.
+//! related shard accounts (low, current, high) with read-only access.
 
 use pinocchio::{error::ProgramError, AccountView};
 use solana_address::Address;
@@ -23,7 +23,7 @@ use super::account_ref::AccountRef;
 /// # IDL Generation
 ///
 /// When used in instruction structs, all three accounts are marked as read-only
-/// (not writable) in the generated IDL.
+/// (not writable) in the generated IDL with names: `{field}_low_shard`, `{field}_current_shard`, `{field}_high_shard`.
 ///
 /// # Invariant
 ///
@@ -31,7 +31,7 @@ use super::account_ref::AccountRef;
 /// maintains the invariant that:
 ///
 /// - Markets always have at least 3 shards
-/// - Every shard has valid `prev` and `next` neighbors (circular linked list)
+/// - Every shard has valid `low` and `high` neighbors (circular linked list)
 /// - Edge-case handling is eliminated by this guarantee
 ///
 /// # Type Parameters
@@ -47,15 +47,15 @@ use super::account_ref::AccountRef;
 ///
 /// // Load a shard triplet for reading
 /// let shards: ShardRefContext<OrderShard> = ShardRefContext::new(
-///     &accounts[0],  // prev shard
+///     &accounts[0],  // low shard
 ///     &accounts[1],  // current shard
-///     &accounts[2],  // next shard
+///     &accounts[2],  // high shard
 /// )?;
 ///
 /// // Read from all three shards
-/// let prev_count = shards.prev().order_count;
+/// let low_count = shards.low().order_count;
 /// let current_count = shards.current().order_count;
-/// let next_count = shards.next().order_count;
+/// let high_count = shards.high().order_count;
 /// ```
 ///
 /// # Performance
@@ -66,12 +66,12 @@ use super::account_ref::AccountRef;
 /// If you need mutable access, use [`ShardRefMutContext`](super::ShardRefMutContext) instead.
 /// If you only need a single shard, use [`AccountRef`] directly.
 pub struct ShardRefContext<'a, T: Loadable, F: Framework> {
-    /// The previous shard in the linked structure.
-    pub prev: AccountRef<'a, T, F>,
+    /// The low shard in the linked structure.
+    pub low: AccountRef<'a, T, F>,
     /// The current (primary) shard being operated on.
     pub current: AccountRef<'a, T, F>,
-    /// The next shard in the linked structure.
-    pub next: AccountRef<'a, T, F>,
+    /// The high shard in the linked structure.
+    pub high: AccountRef<'a, T, F>,
 }
 
 impl<'a, T: Loadable, F: Framework> ShardRefContext<'a, T, F> {
@@ -82,9 +82,9 @@ impl<'a, T: Loadable, F: Framework> ShardRefContext<'a, T, F> {
     ///
     /// # Arguments
     ///
-    /// * `prev_info` - The previous shard's AccountInfo
+    /// * `low_info` - The low shard's AccountInfo
     /// * `current_info` - The current (primary) shard's AccountInfo
-    /// * `next_info` - The next shard's AccountInfo
+    /// * `high_info` - The high shard's AccountInfo
     ///
     /// # Errors
     ///
@@ -95,21 +95,21 @@ impl<'a, T: Loadable, F: Framework> ShardRefContext<'a, T, F> {
     ///
     /// ```ignore
     /// let shards = ShardRefContext::<OrderShard>::new(
-    ///     &accounts[0],  // prev
+    ///     &accounts[0],  // low
     ///     &accounts[1],  // current
-    ///     &accounts[2],  // next
+    ///     &accounts[2],  // high
     /// )?;
     /// ```
     #[inline]
     pub fn new(
-        prev_info: &'a AccountView,
+        low_info: &'a AccountView,
         current_info: &'a AccountView,
-        next_info: &'a AccountView,
+        high_info: &'a AccountView,
     ) -> Result<Self, ProgramError> {
         Ok(Self {
-            prev: AccountRef::load(prev_info)?,
+            low: AccountRef::load(low_info)?,
             current: AccountRef::load(current_info)?,
-            next: AccountRef::load(next_info)?,
+            high: AccountRef::load(high_info)?,
         })
     }
 
@@ -120,26 +120,26 @@ impl<'a, T: Loadable, F: Framework> ShardRefContext<'a, T, F> {
     ///
     /// # Arguments
     ///
-    /// * `prev` - Already-loaded previous shard
+    /// * `low` - Already-loaded low shard
     /// * `current` - Already-loaded current shard
-    /// * `next` - Already-loaded next shard
+    /// * `high` - Already-loaded high shard
     ///
     /// # Example
     ///
     /// ```ignore
-    /// let prev = AccountRef::load(&accounts[0])?;
+    /// let low = AccountRef::load(&accounts[0])?;
     /// let current = AccountRef::load(&accounts[1])?;
-    /// let next = AccountRef::load(&accounts[2])?;
+    /// let high = AccountRef::load(&accounts[2])?;
     ///
-    /// let shards = ShardRefContext::from_loaded(prev, current, next);
+    /// let shards = ShardRefContext::from_loaded(low, current, high);
     /// ```
     #[inline]
     pub fn from_loaded(
-        prev: AccountRef<'a, T, F>,
+        low: AccountRef<'a, T, F>,
         current: AccountRef<'a, T, F>,
-        next: AccountRef<'a, T, F>,
+        high: AccountRef<'a, T, F>,
     ) -> Self {
-        Self { prev, current, next }
+        Self { low, current, high }
     }
 
     /// Get the address of the current shard.
@@ -148,16 +148,16 @@ impl<'a, T: Loadable, F: Framework> ShardRefContext<'a, T, F> {
         self.current.address()
     }
 
-    /// Get the address of the previous shard.
+    /// Get the address of the low shard.
     #[inline]
-    pub fn prev_address(&self) -> &Address {
-        self.prev.address()
+    pub fn low_address(&self) -> &Address {
+        self.low.address()
     }
 
-    /// Get the address of the next shard.
+    /// Get the address of the high shard.
     #[inline]
-    pub fn next_address(&self) -> &Address {
-        self.next.address()
+    pub fn high_address(&self) -> &Address {
+        self.high.address()
     }
 
     /// Get read-only access to the current shard's data.
@@ -172,49 +172,49 @@ impl<'a, T: Loadable, F: Framework> ShardRefContext<'a, T, F> {
         self.current.get()
     }
 
-    /// Get read-only access to the previous shard's data.
+    /// Get read-only access to the low shard's data.
     ///
     /// # Example
     ///
     /// ```ignore
-    /// let prev_max_price = shards.prev().max_price;
+    /// let low_max_price = shards.low().max_price;
     /// ```
     #[inline]
-    pub fn prev(&self) -> &T {
-        self.prev.get()
+    pub fn low(&self) -> &T {
+        self.low.get()
     }
 
-    /// Get read-only access to the next shard's data.
+    /// Get read-only access to the high shard's data.
     ///
     /// # Example
     ///
     /// ```ignore
-    /// let next_min_price = shards.next().min_price;
+    /// let high_min_price = shards.high().min_price;
     /// ```
     #[inline]
-    pub fn next(&self) -> &T {
-        self.next.get()
+    pub fn high(&self) -> &T {
+        self.high.get()
     }
 
     /// Get read-only access to all three shards simultaneously.
     ///
-    /// Returns a tuple of `(prev, current, next)` references.
+    /// Returns a tuple of `(low, current, high)` references.
     ///
     /// # Example
     ///
     /// ```ignore
-    /// let (prev, current, next) = shards.all();
+    /// let (low, current, high) = shards.all();
     ///
     /// // Check price continuity across shards
-    /// assert!(prev.max_price <= current.min_price);
-    /// assert!(current.max_price <= next.min_price);
+    /// assert!(low.max_price <= current.min_price);
+    /// assert!(current.max_price <= high.min_price);
     /// ```
     #[inline]
     pub fn all(&self) -> (&T, &T, &T) {
         (
-            self.prev.get(),
+            self.low.get(),
             self.current.get(),
-            self.next.get(),
+            self.high.get(),
         )
     }
 }

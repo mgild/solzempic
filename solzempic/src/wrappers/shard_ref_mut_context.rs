@@ -1,7 +1,7 @@
 //! Mutable shard reference context for triplet navigation.
 //!
 //! This module provides [`ShardRefMutContext`], a container for managing three
-//! related shard accounts (previous, current, next) with mutable access.
+//! related shard accounts (low, current, high) with mutable access.
 
 use pinocchio::{error::ProgramError, AccountView};
 use solana_address::Address;
@@ -17,13 +17,13 @@ use super::account_ref_mut::AccountRefMut;
 /// This is commonly used for:
 ///
 /// - **Orderbooks**: Orders may need to move between price-range shards
-/// - **Linked lists**: Insertions/deletions update prev/next pointers
+/// - **Linked lists**: Insertions/deletions update low/high pointers
 /// - **Rebalancing**: Moving data between under/over-utilized shards
 ///
 /// # IDL Generation
 ///
 /// When used in instruction structs, all three accounts are marked as writable
-/// in the generated IDL.
+/// in the generated IDL with names: `{field}_low_shard`, `{field}_current_shard`, `{field}_high_shard`.
 ///
 /// # Invariant
 ///
@@ -31,7 +31,7 @@ use super::account_ref_mut::AccountRefMut;
 /// maintains the invariant that:
 ///
 /// - Markets always have at least 3 shards
-/// - Every shard has valid `prev` and `next` neighbors (circular linked list)
+/// - Every shard has valid `low` and `high` neighbors (circular linked list)
 /// - Edge-case handling is eliminated by this guarantee
 ///
 /// # Type Parameters
@@ -47,13 +47,13 @@ use super::account_ref_mut::AccountRefMut;
 ///
 /// // Load a shard triplet for a rebalancing operation
 /// let mut shards: ShardRefMutContext<OrderShard> = ShardRefMutContext::new(
-///     &accounts[0],  // prev shard
+///     &accounts[0],  // low shard
 ///     &accounts[1],  // current shard
-///     &accounts[2],  // next shard
+///     &accounts[2],  // high shard
 /// )?;
 ///
 /// // Access all three shards mutably
-/// let (prev, current, next) = shards.all_mut();
+/// let (low, current, high) = shards.all_mut();
 /// // ... perform rebalancing logic
 /// ```
 ///
@@ -65,12 +65,12 @@ use super::account_ref_mut::AccountRefMut;
 /// If you only need read-only access, use [`ShardRefContext`](super::ShardRefContext) instead.
 /// If you only need a single shard, use [`AccountRefMut`] directly.
 pub struct ShardRefMutContext<'a, T: Loadable, F: Framework> {
-    /// The previous shard in the linked structure.
-    pub prev: AccountRefMut<'a, T, F>,
+    /// The low shard in the linked structure.
+    pub low: AccountRefMut<'a, T, F>,
     /// The current (primary) shard being operated on.
     pub current: AccountRefMut<'a, T, F>,
-    /// The next shard in the linked structure.
-    pub next: AccountRefMut<'a, T, F>,
+    /// The high shard in the linked structure.
+    pub high: AccountRefMut<'a, T, F>,
 }
 
 impl<'a, T: Loadable, F: Framework> ShardRefMutContext<'a, T, F> {
@@ -81,9 +81,9 @@ impl<'a, T: Loadable, F: Framework> ShardRefMutContext<'a, T, F> {
     ///
     /// # Arguments
     ///
-    /// * `prev_info` - The previous shard's AccountInfo
+    /// * `low_info` - The low shard's AccountInfo
     /// * `current_info` - The current (primary) shard's AccountInfo
-    /// * `next_info` - The next shard's AccountInfo
+    /// * `high_info` - The high shard's AccountInfo
     ///
     /// # Errors
     ///
@@ -94,21 +94,67 @@ impl<'a, T: Loadable, F: Framework> ShardRefMutContext<'a, T, F> {
     ///
     /// ```ignore
     /// let shards = ShardRefMutContext::<OrderShard>::new(
-    ///     &accounts[0],  // prev
+    ///     &accounts[0],  // low
     ///     &accounts[1],  // current
-    ///     &accounts[2],  // next
+    ///     &accounts[2],  // high
     /// )?;
     /// ```
     #[inline]
     pub fn new(
-        prev_info: &'a AccountView,
+        low_info: &'a AccountView,
         current_info: &'a AccountView,
-        next_info: &'a AccountView,
+        high_info: &'a AccountView,
     ) -> Result<Self, ProgramError> {
         Ok(Self {
-            prev: AccountRefMut::load(prev_info)?,
+            low: AccountRefMut::load(low_info)?,
             current: AccountRefMut::load(current_info)?,
-            next: AccountRefMut::load(next_info)?,
+            high: AccountRefMut::load(high_info)?,
+        })
+    }
+
+    /// Try to create a shard context, returning `None` if any account is invalid.
+    ///
+    /// This is useful for optional opposite-side shards that may not exist yet.
+    /// For example, when placing a bid order, the ask-side shards may not be
+    /// initialized if no ask orders have been placed. In this case, crossing
+    /// check can be skipped for that liquidity source.
+    ///
+    /// # Arguments
+    ///
+    /// * `low_info` - The low shard's AccountInfo
+    /// * `current_info` - The current (primary) shard's AccountInfo
+    /// * `high_info` - The high shard's AccountInfo
+    ///
+    /// # Returns
+    ///
+    /// `Some(Self)` if all three accounts are valid and initialized, `None` otherwise.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// if let Some(mut opposite_shards) = ShardRefMutContext::<OrderShard>::try_new(
+    ///     &accounts[0],  // low
+    ///     &accounts[1],  // current
+    ///     &accounts[2],  // high
+    /// ) {
+    ///     // Opposite shards exist, check for crossing
+    ///     if let Some(best_price) = opposite_shards.current().best_price() {
+    ///         // ... crossing check
+    ///     }
+    /// } else {
+    ///     // No opposite shards, no crossing possible
+    /// }
+    /// ```
+    #[inline]
+    pub fn try_new(
+        low_info: &'a AccountView,
+        current_info: &'a AccountView,
+        high_info: &'a AccountView,
+    ) -> Option<Self> {
+        Some(Self {
+            low: AccountRefMut::try_load(low_info)?,
+            current: AccountRefMut::try_load(current_info)?,
+            high: AccountRefMut::try_load(high_info)?,
         })
     }
 
@@ -119,26 +165,26 @@ impl<'a, T: Loadable, F: Framework> ShardRefMutContext<'a, T, F> {
     ///
     /// # Arguments
     ///
-    /// * `prev` - Already-loaded previous shard
+    /// * `low` - Already-loaded low shard
     /// * `current` - Already-loaded current shard
-    /// * `next` - Already-loaded next shard
+    /// * `high` - Already-loaded high shard
     ///
     /// # Example
     ///
     /// ```ignore
-    /// let prev = AccountRefMut::load(&accounts[0])?;
+    /// let low = AccountRefMut::load(&accounts[0])?;
     /// let current = AccountRefMut::load(&accounts[1])?;
-    /// let next = AccountRefMut::load(&accounts[2])?;
+    /// let high = AccountRefMut::load(&accounts[2])?;
     ///
-    /// let shards = ShardRefMutContext::from_loaded(prev, current, next);
+    /// let shards = ShardRefMutContext::from_loaded(low, current, high);
     /// ```
     #[inline]
     pub fn from_loaded(
-        prev: AccountRefMut<'a, T, F>,
+        low: AccountRefMut<'a, T, F>,
         current: AccountRefMut<'a, T, F>,
-        next: AccountRefMut<'a, T, F>,
+        high: AccountRefMut<'a, T, F>,
     ) -> Self {
-        Self { prev, current, next }
+        Self { low, current, high }
     }
 
     /// Get the address of the current shard.
@@ -147,16 +193,16 @@ impl<'a, T: Loadable, F: Framework> ShardRefMutContext<'a, T, F> {
         self.current.address()
     }
 
-    /// Get the address of the previous shard.
+    /// Get the address of the low shard.
     #[inline]
-    pub fn prev_address(&self) -> &Address {
-        self.prev.address()
+    pub fn low_address(&self) -> &Address {
+        self.low.address()
     }
 
-    /// Get the address of the next shard.
+    /// Get the address of the high shard.
     #[inline]
-    pub fn next_address(&self) -> &Address {
-        self.next.address()
+    pub fn high_address(&self) -> &Address {
+        self.high.address()
     }
 
     /// Get read-only access to the current shard's data.
@@ -165,16 +211,16 @@ impl<'a, T: Loadable, F: Framework> ShardRefMutContext<'a, T, F> {
         self.current.get()
     }
 
-    /// Get read-only access to the previous shard's data.
+    /// Get read-only access to the low shard's data.
     #[inline]
-    pub fn prev(&self) -> &T {
-        self.prev.get()
+    pub fn low(&self) -> &T {
+        self.low.get()
     }
 
-    /// Get read-only access to the next shard's data.
+    /// Get read-only access to the high shard's data.
     #[inline]
-    pub fn next(&self) -> &T {
-        self.next.get()
+    pub fn high(&self) -> &T {
+        self.high.get()
     }
 
     /// Get mutable access to the current shard's data.
@@ -189,55 +235,55 @@ impl<'a, T: Loadable, F: Framework> ShardRefMutContext<'a, T, F> {
         self.current.get_mut()
     }
 
-    /// Get mutable access to the previous shard's data.
+    /// Get mutable access to the low shard's data.
     ///
     /// # Example
     ///
     /// ```ignore
-    /// shards.prev_mut().next_shard = *new_shard_key;
+    /// shards.low_mut().high_shard = *new_shard_key;
     /// ```
     #[inline]
-    pub fn prev_mut(&mut self) -> &mut T {
-        self.prev.get_mut()
+    pub fn low_mut(&mut self) -> &mut T {
+        self.low.get_mut()
     }
 
-    /// Get mutable access to the next shard's data.
+    /// Get mutable access to the high shard's data.
     ///
     /// # Example
     ///
     /// ```ignore
-    /// shards.next_mut().prev_shard = *new_shard_key;
+    /// shards.high_mut().low_shard = *new_shard_key;
     /// ```
     #[inline]
-    pub fn next_mut(&mut self) -> &mut T {
-        self.next.get_mut()
+    pub fn high_mut(&mut self) -> &mut T {
+        self.high.get_mut()
     }
 
     /// Get mutable access to all three shards simultaneously.
     ///
-    /// Returns a tuple of `(prev, current, next)` mutable references.
+    /// Returns a tuple of `(low, current, high)` mutable references.
     /// This is useful for operations that need to update multiple shards
     /// atomically, such as rebalancing or inserting into a linked structure.
     ///
     /// # Example
     ///
     /// ```ignore
-    /// let (prev, current, next) = shards.all_mut();
+    /// let (low, current, high) = shards.all_mut();
     ///
-    /// // Move an order from current to next shard
+    /// // Move an order from current to high shard
     /// let order = current.remove_order(order_idx);
-    /// next.insert_order(order);
+    /// high.insert_order(order);
     ///
     /// // Update linked list pointers
-    /// prev.next_shard = *current_key;
-    /// next.prev_shard = *current_key;
+    /// low.high_shard = *current_key;
+    /// high.low_shard = *current_key;
     /// ```
     #[inline]
     pub fn all_mut(&mut self) -> (&mut T, &mut T, &mut T) {
         (
-            self.prev.get_mut(),
+            self.low.get_mut(),
             self.current.get_mut(),
-            self.next.get_mut(),
+            self.high.get_mut(),
         )
     }
 }

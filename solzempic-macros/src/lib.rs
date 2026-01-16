@@ -544,19 +544,21 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
         let (is_signer, is_writable, is_program, expand_count) = analyze_field_type(field_ty);
 
         if expand_count > 1 {
-            let shard_names = ["left_shard", "current_shard", "right_shard"];
-            for (i, shard_name) in shard_names.iter().enumerate() {
+            // Generate nested shard names: {field_name}_low_shard, {field_name}_current_shard, {field_name}_high_shard
+            let shard_suffixes = ["low_shard", "current_shard", "high_shard"];
+            for (i, suffix) in shard_suffixes.iter().enumerate() {
                 let idx = current_idx + i;
+                let nested_name = format!("{}_{}", field_name_str, suffix);
                 account_metas.push(quote! {
                     ::solzempic::ShankAccountMeta {
                         index: #idx,
-                        name: #shard_name,
+                        name: #nested_name,
                         is_signer: false,
                         is_writable: true,
                         is_program: false,
                     }
                 });
-                shank_attr_strings.push(format!("#[account({}, writable, name=\"{}\")]", idx, shard_name));
+                shank_attr_strings.push(format!("#[account({}, writable, name=\"{}\")]", idx, nested_name));
             }
             current_idx += expand_count;
         } else {

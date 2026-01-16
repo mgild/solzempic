@@ -137,6 +137,41 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
         Self::load_unchecked(info)
     }
 
+    /// Try to load an account, returning `None` if validation fails.
+    ///
+    /// This is useful for optional accounts that may or may not exist (e.g.,
+    /// opposite side orderbook shards that haven't been initialized yet).
+    /// Returns `None` for:
+    /// - System-owned accounts (uninitialized PDAs)
+    /// - Accounts not owned by this program
+    /// - Non-writable accounts
+    /// - Accounts with wrong discriminator
+    ///
+    /// # Returns
+    ///
+    /// `Some(Self)` if the account is valid and initialized, `None` otherwise.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// if let Some(mut shard) = AccountRefMut::<OrderShard>::try_load(&accounts[0]) {
+    ///     // Shard exists and is valid, use it
+    ///     let best_price = shard.get().best_price();
+    /// } else {
+    ///     // Shard doesn't exist yet, skip crossing check
+    /// }
+    /// ```
+    #[inline]
+    pub fn try_load(info: &'a AccountView) -> Option<Self> {
+        if !info.is_writable() {
+            return None;
+        }
+        if !address_eq(unsafe { info.owner() }, &F::PROGRAM_ID) {
+            return None;
+        }
+        Self::load_unchecked(info).ok()
+    }
+
     /// Load an account without ownership or writable validation.
     ///
     /// This skips both the `is_writable` and ownership checks, but still validates
