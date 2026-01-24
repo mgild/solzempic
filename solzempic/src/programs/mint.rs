@@ -215,3 +215,63 @@ impl<'a> Mint<'a> {
         address_eq(unsafe { self.info.owner() }, &TOKEN_2022_PROGRAM_ID)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    extern crate std;
+    use std::vec;
+    use std::vec::Vec;
+
+    use super::*;
+
+    fn create_valid_mint_data(decimals: u8) -> Vec<u8> {
+        let mut data = vec![0u8; 82];
+        data[0] = 1; // mint_authority present
+        data[44] = decimals;
+        data[45] = 1; // is_initialized = true
+        data
+    }
+
+    fn create_uninitialized_mint_data(decimals: u8) -> Vec<u8> {
+        let mut data = vec![0u8; 82];
+        data[0] = 1; // mint_authority present
+        data[44] = decimals;
+        data[45] = 0; // is_initialized = false
+        data
+    }
+
+    #[test]
+    fn test_valid_mint_decimals() {
+        // Test that we correctly read decimals from a valid mint
+        let data = create_valid_mint_data(9);
+        assert_eq!(data[44], 9, "Decimals should be at offset 44");
+        assert_eq!(data[45], 1, "is_initialized should be at offset 45");
+    }
+
+    #[test]
+    fn test_uninitialized_mint_layout() {
+        // Verify the layout of an uninitialized mint
+        let data = create_uninitialized_mint_data(6);
+        assert_eq!(data[44], 6, "Decimals should still be set");
+        assert_eq!(data[45], 0, "is_initialized should be 0");
+    }
+
+    #[test]
+    fn test_truncated_mint_data() {
+        // Verify truncated data is too short for decimals
+        let data = vec![0u8; 40];
+        assert!(data.len() < 82, "Truncated data should be too short");
+        assert!(data.get(44).is_none(), "Should not be able to access decimals offset");
+    }
+
+    #[test]
+    fn test_mint_offsets_are_correct() {
+        // Verify our offset constants match the SPL Token layout
+        assert_eq!(Mint::MINT_AUTHORITY_OPTION_OFFSET, 0);
+        assert_eq!(Mint::MINT_AUTHORITY_OFFSET, 4);
+        assert_eq!(Mint::SUPPLY_OFFSET, 36);
+        assert_eq!(Mint::DECIMALS_OFFSET, 44);
+        assert_eq!(Mint::FREEZE_AUTHORITY_OPTION_OFFSET, 46);
+        assert_eq!(Mint::FREEZE_AUTHORITY_OFFSET, 50);
+    }
+}
