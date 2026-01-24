@@ -77,12 +77,26 @@ impl<'a> ValidatedAccount<'a> for Mint<'a> {
     ///
     /// Returns [`ProgramError::IllegalOwner`] if the account is not owned
     /// by either the SPL Token or Token-2022 program.
+    ///
+    /// Returns [`ProgramError::UninitializedAccount`] if the mint data is
+    /// too small or the mint is not initialized.
     #[inline]
     fn wrap(info: &'a AccountView) -> Result<Self, ProgramError> {
         let owner = unsafe { info.owner() };
         if !address_eq(owner, &TOKEN_PROGRAM_ID) && !address_eq(owner, &TOKEN_2022_PROGRAM_ID) {
             return Err(ProgramError::IllegalOwner);
         }
+
+        // Validate mint is initialized (minimum 82 bytes, is_initialized=true at offset 45)
+        let data = unsafe { info.borrow_unchecked() };
+        if data.len() < 82 {
+            return Err(ProgramError::UninitializedAccount);
+        }
+        if data[45] == 0 {
+            // is_initialized == false
+            return Err(ProgramError::UninitializedAccount);
+        }
+
         Ok(Self { info })
     }
 
@@ -185,7 +199,8 @@ impl<'a> Mint<'a> {
     #[inline]
     pub fn decimals(&self) -> u8 {
         let data = unsafe { self.info.borrow_unchecked() };
-        data.get(Self::DECIMALS_OFFSET).copied().unwrap_or(0)
+        // Safe: wrap() validates data.len() >= 82, and DECIMALS_OFFSET is 44
+        data[Self::DECIMALS_OFFSET]
     }
 
     /// Check if this is a Token-2022 mint.
