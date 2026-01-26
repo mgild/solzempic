@@ -87,6 +87,22 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Data, DeriveInput, Fields, Expr, Lit, ItemImpl, ImplItem, ItemStruct, Type};
 
+/// Convert a PascalCase identifier to snake_case.
+fn to_snake_case(s: &str) -> String {
+    let mut result = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if c.is_uppercase() {
+            if i > 0 {
+                result.push('_');
+            }
+            result.push(c.to_ascii_lowercase());
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
 /// Attribute macro for complete Solana program setup.
 ///
 /// This is the main entry point for defining a Solzempic program. It generates
@@ -208,6 +224,22 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         (variant_name, disc_expr, accounts)
     }).collect();
 
+    // Filter out any ShankInstruction derive from input attrs to avoid conflicts
+    let filtered_attrs: Vec<_> = attrs.iter().filter(|attr| {
+        if attr.path().is_ident("derive") {
+            // Check if the derive contains ShankInstruction
+            let content = attr.meta.require_list().ok();
+            if let Some(content) = content {
+                let tokens_str = content.tokens.to_string();
+                !tokens_str.contains("ShankInstruction")
+            } else {
+                true
+            }
+        } else {
+            true
+        }
+    }).collect();
+
     // Generate TryFrom<u8> match arms
     let try_from_arms = variant_info.iter().map(|(name, disc, _)| {
         quote! { #disc => Ok(#enum_name::#name), }
@@ -239,27 +271,53 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         }
     });
 
-    // Generate variant definitions for the enum with Shank #[account(...)] attributes
-    let variant_defs = variant_info.iter().map(|(name, disc, accounts)| {
-        // Generate #[account(idx, constraints, name="...")] attributes for Shank
-        let account_attrs: Vec<proc_macro2::TokenStream> = accounts.iter().enumerate().map(|(idx, (acc_name, is_signer, is_writable, _is_program))| {
-            let mut constraints = Vec::new();
-            if *is_writable { constraints.push(quote! { writable }); }
-            if *is_signer { constraints.push(quote! { signer }); }
+    // Generate variant definitions for the enum
+    let variant_defs = variant_info.iter().map(|(name, disc, _accounts)| {
+        quote! {
+            #name = #disc
+        }
+    });
 
-            let idx_lit = syn::LitInt::new(&idx.to_string(), proc_macro2::Span::call_site());
-            let name_lit = syn::LitStr::new(acc_name, proc_macro2::Span::call_site());
+    // Generate enum definition (no ShankInstruction - we generate IDL metadata ourselves)
+    let enum_definition = quote! {
+        #(#filtered_attrs)*
+        #[repr(u8)]
+        #vis enum #enum_name {
+            #(#variant_defs),*
+        }
+    };
 
-            if constraints.is_empty() {
-                quote! { #[account(#idx_lit, name = #name_lit)] }
-            } else {
-                quote! { #[account(#idx_lit, #(#constraints),*, name = #name_lit)] }
+    // Generate Shank-compatible IDL instruction metadata for each variant
+    // This replaces what ShankInstruction derive would generate
+    let shank_instruction_metas = variant_info.iter().map(|(name, disc, accounts)| {
+        let name_str = name.to_string();
+        // Convert PascalCase to snake_case for module name
+        let mod_name_str = to_snake_case(&name_str);
+        let mod_name = syn::Ident::new(&mod_name_str, name.span());
+        let num_accounts = accounts.len();
+
+        // Generate account metadata array
+        let account_metas: Vec<proc_macro2::TokenStream> = accounts.iter().enumerate().map(|(idx, (acc_name, is_signer, is_writable, _is_program))| {
+            quote! {
+                ::solzempic::ShankAccountMeta {
+                    index: #idx,
+                    name: #acc_name,
+                    is_signer: #is_signer,
+                    is_writable: #is_writable,
+                    is_program: false,
+                }
             }
         }).collect();
 
         quote! {
-            #(#account_attrs)*
-            #name = #disc
+            /// IDL metadata for #name instruction
+            pub mod #mod_name {
+                pub const DISCRIMINATOR: u8 = #disc as u8;
+                pub const NAME: &str = #name_str;
+                pub const ACCOUNTS: [::solzempic::ShankAccountMeta; #num_accounts] = [
+                    #(#account_metas),*
+                ];
+            }
         }
     });
 
@@ -292,12 +350,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
             &ID
         }
 
-        #(#attrs)*
-        #[repr(u8)]
-        #[derive(::solzempic::shank::ShankInstruction)]
-        #vis enum #enum_name {
-            #(#variant_defs),*
-        }
+        #enum_definition
 
         impl ::core::convert::TryFrom<u8> for #enum_name {
             type Error = ::pinocchio::error::ProgramError;
@@ -360,6 +413,13 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         pub const IDL_INSTRUCTIONS: &[::solzempic::InstructionMeta] = &[
             #(#idl_entries),*
         ];
+
+        /// Shank-compatible instruction metadata module.
+        /// Generated by SolzempicEntrypoint macro to provide IDL metadata
+        /// when using expression discriminants (which ShankInstruction doesn't support).
+        pub mod instruction_meta {
+            #(#shank_instruction_metas)*
+        }
     };
 
     TokenStream::from(expanded)
