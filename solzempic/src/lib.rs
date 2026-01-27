@@ -638,9 +638,12 @@ pub trait AccountIdlMeta {
     const META: AccountTypeMeta;
 }
 
-// Re-export inventory for use by generated code
+// Re-export inventory and bs58 for use by generated code
 #[cfg(feature = "idl")]
 pub use inventory;
+
+#[cfg(feature = "idl")]
+pub use bs58;
 
 // Inventory collection for account types
 #[cfg(feature = "idl")]
