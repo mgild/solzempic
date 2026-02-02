@@ -7,7 +7,7 @@ use pinocchio::{AccountView, error::ProgramError};
 use solana_address::address_eq;
 
 use super::ids::ADDRESS_LOOKUP_TABLE_PROGRAM_ID;
-use super::traits::ValidatedAccount;
+use super::traits::{HasAccountView, ValidatedAccount};
 
 /// Validated Address Lookup Table Program wrapper.
 ///
@@ -71,6 +71,13 @@ impl<'a> ValidatedAccount<'a> for AltProgram<'a> {
 
     #[inline]
     fn info(&self) -> &'a AccountView {
+        self.info
+    }
+}
+
+impl<'a> HasAccountView for AltProgram<'a> {
+    #[inline]
+    fn account_view(&self) -> &AccountView {
         self.info
     }
 }

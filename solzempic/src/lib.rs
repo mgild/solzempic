@@ -154,7 +154,7 @@ pub use programs::{
     ADDRESS_LOOKUP_TABLE_PROGRAM_ID, CLOCK_SYSVAR_ID, RENT_SYSVAR_ID, SLOT_HASHES_SYSVAR_ID,
     INSTRUCTIONS_SYSVAR_ID, RECENT_BLOCKHASHES_SYSVAR_ID, LAST_RESTART_SLOT_SYSVAR_ID,
     // Traits
-    ValidatedAccount,
+    ValidatedAccount, HasAccountView,
     // Program wrappers
     SystemProgram, TokenProgram, AtaProgram, AltProgram, Lut,
     // Signer/Payer/MutSigner
@@ -170,7 +170,10 @@ pub use programs::{
     validate_token_program, validate_system_program, validate_clock_sysvar,
     validate_slot_hashes_sysvar, validate_rent_sysvar,
 };
-pub use wrappers::{AccountRef, AccountRefMut, AsAccountRef, ShardRefContext, ShardRefMutContext};
+pub use wrappers::{
+    AccountRef, AccountRefMut, AsAccountRef, ShardRefContext, ShardRefMutContext,
+    ShardListNode, ShardListRef, ShardListRefMut,
+};
 
 // Re-export core traits
 pub use traits::{check_discriminator, Account, Initializable, Loadable};
@@ -722,6 +725,18 @@ macro_rules! define_framework {
         /// framework baked in. Use this for sharded data structures that need mutable
         /// access to neighboring shards for rebalancing or traversal.
         pub type ShardRefMutContext<'a, T> = $crate::ShardRefMutContext<'a, T, Solzempic>;
+
+        /// Read-only context for singly-linked shard lists.
+        ///
+        /// This is a type alias for [`solzempic::ShardListRef`] with your program's
+        /// framework baked in. Use this for simpler singly-linked shard chains.
+        pub type ShardListRef<'a, T> = $crate::ShardListRef<'a, T, Solzempic>;
+
+        /// Writable context for singly-linked shard lists.
+        ///
+        /// This is a type alias for [`solzempic::ShardListRefMut`] with your program's
+        /// framework baked in. Use this for insert/remove operations in shard chains.
+        pub type ShardListRefMut<'a, T> = $crate::ShardListRefMut<'a, T, Solzempic>;
 
         /// Returns the program ID.
         #[inline]

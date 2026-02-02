@@ -6,7 +6,7 @@
 
 use pinocchio::{AccountView, error::ProgramError};
 
-use super::traits::ValidatedAccount;
+use super::traits::{HasAccountView, ValidatedAccount};
 
 /// Validated signer account wrapper.
 ///
@@ -89,6 +89,13 @@ impl<'a> ValidatedAccount<'a> for Signer<'a> {
 
     #[inline]
     fn info(&self) -> &'a AccountView {
+        self.info
+    }
+}
+
+impl<'a> HasAccountView for Signer<'a> {
+    #[inline]
+    fn account_view(&self) -> &AccountView {
         self.info
     }
 }
@@ -179,6 +186,13 @@ impl<'a> ValidatedAccount<'a> for MutSigner<'a> {
     }
 }
 
+impl<'a> HasAccountView for MutSigner<'a> {
+    #[inline]
+    fn account_view(&self) -> &AccountView {
+        self.info
+    }
+}
+
 impl<'a> MutSigner<'a> {
     /// Returns the account's public key.
     #[inline]
@@ -233,6 +247,13 @@ impl<'a> ValidatedAccount<'a> for Writable<'a> {
     }
 }
 
+impl<'a> HasAccountView for Writable<'a> {
+    #[inline]
+    fn account_view(&self) -> &AccountView {
+        self.info
+    }
+}
+
 impl<'a> Writable<'a> {
     /// Returns the account's public key.
     #[inline]
@@ -277,6 +298,13 @@ impl<'a> ValidatedAccount<'a> for ReadOnly<'a> {
 
     #[inline]
     fn info(&self) -> &'a AccountView {
+        self.info
+    }
+}
+
+impl<'a> HasAccountView for ReadOnly<'a> {
+    #[inline]
+    fn account_view(&self) -> &AccountView {
         self.info
     }
 }

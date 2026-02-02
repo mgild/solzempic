@@ -2,9 +2,47 @@
 //!
 //! This module defines the [`ValidatedAccount`] trait, which provides a
 //! consistent interface for all program and sysvar account wrappers.
+//!
+//! Also defines [`HasAccountView`] for ergonomic function parameters that
+//! accept either raw `&AccountView` or validated wrappers.
 
 use pinocchio::{error::ProgramError, AccountView};
 use solana_address::Address;
+
+/// Trait for types that can provide a reference to an AccountView.
+///
+/// This trait enables ergonomic function signatures that accept both
+/// raw `&AccountView` and validated wrapper types like `Signer`, `Mint`, etc.
+///
+/// # Example
+///
+/// ```ignore
+/// fn do_something(account: impl HasAccountView) {
+///     let view = account.account_view();
+///     // use view...
+/// }
+///
+/// // Both work:
+/// do_something(&raw_account_view);
+/// do_something(&signer);
+/// ```
+pub trait HasAccountView {
+    fn account_view(&self) -> &AccountView;
+}
+
+impl HasAccountView for AccountView {
+    #[inline]
+    fn account_view(&self) -> &AccountView {
+        self
+    }
+}
+
+impl<'a> HasAccountView for &'a AccountView {
+    #[inline]
+    fn account_view(&self) -> &AccountView {
+        self
+    }
+}
 
 /// Trait for validated program and sysvar account wrappers.
 ///

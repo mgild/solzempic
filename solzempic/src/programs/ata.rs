@@ -7,7 +7,7 @@ use pinocchio::{AccountView, error::ProgramError};
 use solana_address::address_eq;
 
 use super::ids::ASSOCIATED_TOKEN_PROGRAM_ID;
-use super::traits::ValidatedAccount;
+use super::traits::{HasAccountView, ValidatedAccount};
 
 /// Validated Associated Token Account Program wrapper.
 ///
@@ -71,6 +71,13 @@ impl<'a> ValidatedAccount<'a> for AtaProgram<'a> {
 
     #[inline]
     fn info(&self) -> &'a AccountView {
+        self.info
+    }
+}
+
+impl<'a> HasAccountView for AtaProgram<'a> {
+    #[inline]
+    fn account_view(&self) -> &AccountView {
         self.info
     }
 }

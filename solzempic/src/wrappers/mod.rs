@@ -68,12 +68,16 @@
 
 mod account_ref;
 mod account_ref_mut;
+mod shard_list_ref;
+mod shard_list_ref_mut;
 mod shard_ref_context;
 mod shard_ref_mut_context;
 mod traits;
 
 pub use account_ref::AccountRef;
 pub use account_ref_mut::AccountRefMut;
+pub use shard_list_ref::{ShardListNode, ShardListRef};
+pub use shard_list_ref_mut::ShardListRefMut;
 pub use shard_ref_context::ShardRefContext;
 pub use shard_ref_mut_context::ShardRefMutContext;
 pub use traits::AsAccountRef;

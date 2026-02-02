@@ -344,6 +344,12 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         /// Writable context for sharded data structures.
         pub type ShardRefMutContext<'a, T> = ::solzempic::ShardRefMutContext<'a, T, Solzempic>;
 
+        /// Read-only context for singly-linked shard lists.
+        pub type ShardListRef<'a, T> = ::solzempic::ShardListRef<'a, T, Solzempic>;
+
+        /// Writable context for singly-linked shard lists.
+        pub type ShardListRefMut<'a, T> = ::solzempic::ShardListRefMut<'a, T, Solzempic>;
+
         /// Returns the program ID.
         #[inline]
         pub fn id() -> &'static ::solana_address::Address {

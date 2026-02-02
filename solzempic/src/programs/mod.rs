@@ -45,7 +45,7 @@ pub use system::SystemProgram;
 pub use sysvars::{ClockSysvar, InstructionsSysvar, LastRestartSlot, LastRestartSlotSysvar, RecentBlockhashesSysvar, RentSysvar, SlotHashesSysvar};
 pub use token_account::{TokenAccountData, TokenAccountRefMut};
 pub use token_program::TokenProgram;
-pub use traits::ValidatedAccount;
+pub use traits::{HasAccountView, ValidatedAccount};
 pub use vault::{SolVault, Vault};
 pub use validation::{
     validate_clock_sysvar, validate_rent_sysvar, validate_slot_hashes_sysvar,

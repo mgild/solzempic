@@ -11,6 +11,7 @@ use pinocchio::{AccountView, error::ProgramError};
 use solana_address::{Address, address_eq};
 
 use super::ids::{ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID};
+use super::traits::HasAccountView;
 
 /// SPL Token account data layout.
 ///
@@ -266,21 +267,33 @@ impl<'a> TokenAccountRefMut<'a> {
     /// # Arguments
     ///
     /// * `account` - The ATA to create/verify
-    /// * `payer` - Account paying for rent if creation needed
+    /// * `payer` - Account paying for rent if creation needed (Signer or &AccountView)
     /// * `owner` - The wallet that will own the ATA
-    /// * `mint` - The token mint
-    /// * `system_program` - System program account
-    /// * `token_program` - Token or Token-2022 program
-    /// * `ata_program` - ATA program account
+    /// * `mint` - The token mint (Mint or &AccountView)
+    /// * `system_program` - System program account (SystemProgram or &AccountView)
+    /// * `token_program` - Token or Token-2022 program (TokenProgram or &AccountView)
+    /// * `ata_program` - ATA program account (AtaProgram or &AccountView)
     ///
     /// # Example
     ///
     /// ```ignore
+    /// // New ergonomic style - pass wrappers directly:
+    /// TokenAccountRefMut::init_ata(
+    ///     &user_ata,
+    ///     &payer,
+    ///     &user,
+    ///     &mint,
+    ///     &system_program,
+    ///     &token_program,
+    ///     &ata_program,
+    /// )?;
+    ///
+    /// // Old style still works:
     /// TokenAccountRefMut::init_ata(
     ///     &user_ata,
     ///     payer.info(),
     ///     user.info(),
-    ///     &mint_account,
+    ///     mint.info(),
     ///     system_program.info(),
     ///     token_program.info(),
     ///     ata_program.info(),
@@ -289,13 +302,20 @@ impl<'a> TokenAccountRefMut<'a> {
     #[inline]
     pub fn init_ata(
         account: &AccountView,
-        payer: &AccountView,
-        owner: &AccountView,
-        mint: &AccountView,
-        system_program: &AccountView,
-        token_program: &AccountView,
-        ata_program: &AccountView,
+        payer: impl HasAccountView,
+        owner: impl HasAccountView,
+        mint: impl HasAccountView,
+        system_program: impl HasAccountView,
+        token_program: impl HasAccountView,
+        ata_program: impl HasAccountView,
     ) -> Result<(), ProgramError> {
+        let payer = payer.account_view();
+        let owner = owner.account_view();
+        let mint = mint.account_view();
+        let system_program = system_program.account_view();
+        let token_program = token_program.account_view();
+        let ata_program = ata_program.account_view();
+
         // Skip CPI if already initialized - check owner is a token program
         let account_owner = unsafe { account.owner() };
         if address_eq(account_owner, &TOKEN_PROGRAM_ID) || address_eq(account_owner, &TOKEN_2022_PROGRAM_ID) {
@@ -364,5 +384,12 @@ impl<'a> TokenAccountRefMut<'a> {
         )?;
 
         Ok(())
+    }
+}
+
+impl<'a> HasAccountView for TokenAccountRefMut<'a> {
+    #[inline]
+    fn account_view(&self) -> &AccountView {
+        self.info
     }
 }

@@ -10,6 +10,7 @@ use pinocchio::{error::ProgramError, AccountView};
 use solana_address::{Address, address_eq};
 
 use super::ids::{SYSTEM_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID};
+use super::traits::HasAccountView;
 
 /// Vault token account with authority validation.
 ///
@@ -109,6 +110,13 @@ impl<'a> Vault<'a> {
     }
 }
 
+impl<'a> HasAccountView for Vault<'a> {
+    #[inline]
+    fn account_view(&self) -> &AccountView {
+        self.info
+    }
+}
+
 /// SOL vault account wrapper.
 ///
 /// `SolVault` wraps a system-owned account used to hold native SOL.
@@ -185,5 +193,12 @@ impl<'a> SolVault<'a> {
     #[inline]
     pub fn is_writable(&self) -> bool {
         self.info.is_writable()
+    }
+}
+
+impl<'a> HasAccountView for SolVault<'a> {
+    #[inline]
+    fn account_view(&self) -> &AccountView {
+        self.info
     }
 }

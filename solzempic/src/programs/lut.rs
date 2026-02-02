@@ -7,6 +7,7 @@ use pinocchio::{AccountView, error::ProgramError};
 use solana_address::{Address, address_eq};
 
 use super::ids::{ADDRESS_LOOKUP_TABLE_PROGRAM_ID, SYSTEM_PROGRAM_ID};
+use super::traits::HasAccountView;
 
 /// Address Lookup Table account wrapper.
 ///
@@ -115,5 +116,12 @@ impl<'a> Lut<'a> {
     #[inline]
     pub fn needs_init(&self) -> bool {
         !self.initialized
+    }
+}
+
+impl<'a> HasAccountView for Lut<'a> {
+    #[inline]
+    fn account_view(&self) -> &AccountView {
+        self.info
     }
 }

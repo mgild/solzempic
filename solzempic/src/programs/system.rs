@@ -7,7 +7,7 @@ use pinocchio::{AccountView, error::ProgramError};
 use solana_address::address_eq;
 
 use super::ids::SYSTEM_PROGRAM_ID;
-use super::traits::ValidatedAccount;
+use super::traits::{HasAccountView, ValidatedAccount};
 
 /// Validated System Program account wrapper.
 ///
@@ -70,6 +70,13 @@ impl<'a> ValidatedAccount<'a> for SystemProgram<'a> {
 
     #[inline]
     fn info(&self) -> &'a AccountView {
+        self.info
+    }
+}
+
+impl<'a> HasAccountView for SystemProgram<'a> {
+    #[inline]
+    fn account_view(&self) -> &AccountView {
         self.info
     }
 }

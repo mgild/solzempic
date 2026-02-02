@@ -7,7 +7,7 @@ use pinocchio::{AccountView, error::ProgramError};
 use solana_address::{Address, address_eq};
 
 use super::ids::{TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID};
-use super::traits::ValidatedAccount;
+use super::traits::{HasAccountView, ValidatedAccount};
 
 /// Validated SPL Token Mint account wrapper.
 ///
@@ -102,6 +102,13 @@ impl<'a> ValidatedAccount<'a> for Mint<'a> {
 
     #[inline]
     fn info(&self) -> &'a AccountView {
+        self.info
+    }
+}
+
+impl<'a> HasAccountView for Mint<'a> {
+    #[inline]
+    fn account_view(&self) -> &AccountView {
         self.info
     }
 }
