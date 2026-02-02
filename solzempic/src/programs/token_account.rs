@@ -267,37 +267,16 @@ impl<'a> TokenAccountRefMut<'a> {
     /// # Arguments
     ///
     /// * `account` - The ATA to create/verify
-    /// * `payer` - Account paying for rent if creation needed (Signer or &AccountView)
+    /// * `payer` - Account paying for rent if creation needed
     /// * `owner` - The wallet that will own the ATA
-    /// * `mint` - The token mint (Mint or &AccountView)
-    /// * `system_program` - System program account (SystemProgram or &AccountView)
-    /// * `token_program` - Token or Token-2022 program (TokenProgram or &AccountView)
-    /// * `ata_program` - ATA program account (AtaProgram or &AccountView)
+    /// * `mint` - The token mint
+    /// * `system_program` - System program account
+    /// * `token_program` - Token or Token-2022 program
     ///
     /// # Example
     ///
     /// ```ignore
-    /// // New ergonomic style - pass wrappers directly:
-    /// TokenAccountRefMut::init_ata(
-    ///     &user_ata,
-    ///     &payer,
-    ///     &user,
-    ///     &mint,
-    ///     &system_program,
-    ///     &token_program,
-    ///     &ata_program,
-    /// )?;
-    ///
-    /// // Old style still works:
-    /// TokenAccountRefMut::init_ata(
-    ///     &user_ata,
-    ///     payer.info(),
-    ///     user.info(),
-    ///     mint.info(),
-    ///     system_program.info(),
-    ///     token_program.info(),
-    ///     ata_program.info(),
-    /// )?;
+    /// TokenAccountRefMut::init_ata(&user_ata, &payer, &user, &mint, &system_program, &token_program)?;
     /// ```
     #[inline]
     pub fn init_ata(
@@ -307,19 +286,16 @@ impl<'a> TokenAccountRefMut<'a> {
         mint: impl HasAccountView,
         system_program: impl HasAccountView,
         token_program: impl HasAccountView,
-        ata_program: impl HasAccountView,
     ) -> Result<(), ProgramError> {
         let payer = payer.account_view();
         let owner = owner.account_view();
         let mint = mint.account_view();
         let system_program = system_program.account_view();
         let token_program = token_program.account_view();
-        let ata_program = ata_program.account_view();
 
         // Skip CPI if already initialized - check owner is a token program
         let account_owner = unsafe { account.owner() };
         if address_eq(account_owner, &TOKEN_PROGRAM_ID) || address_eq(account_owner, &TOKEN_2022_PROGRAM_ID) {
-            // Already a token account, no need to init
             return Ok(());
         }
 
@@ -329,13 +305,7 @@ impl<'a> TokenAccountRefMut<'a> {
             return Err(ProgramError::IllegalOwner);
         }
 
-        // Verify ATA program
-        if !address_eq(ata_program.address(), &ASSOCIATED_TOKEN_PROGRAM_ID) {
-            return Err(ProgramError::IncorrectProgramId);
-        }
-
-        // ATA CreateIdempotent instruction = 1
-        let instruction_data = [1u8];
+        let instruction_data = [1u8]; // CreateIdempotent
 
         let account_metas = [
             pinocchio::instruction::InstructionAccount {
@@ -383,6 +353,56 @@ impl<'a> TokenAccountRefMut<'a> {
             &[payer, account, owner, mint, system_program, token_program],
         )?;
 
+        Ok(())
+    }
+
+    /// Create or initialize an ATA where the owner pays for their own account.
+    ///
+    /// Convenience wrapper for [`init_ata`](Self::init_ata) when payer == owner.
+    /// Does not require ata_program account since the program ID is a constant.
+    #[inline]
+    pub fn init_ata_for_self(
+        account: &AccountView,
+        owner: impl HasAccountView,
+        mint: impl HasAccountView,
+        system_program: impl HasAccountView,
+        token_program: impl HasAccountView,
+    ) -> Result<(), ProgramError> {
+        let owner = owner.account_view();
+        let mint = mint.account_view();
+        let system_program = system_program.account_view();
+        let token_program = token_program.account_view();
+
+        // Skip CPI if already initialized
+        let account_owner = unsafe { account.owner() };
+        if address_eq(account_owner, &TOKEN_PROGRAM_ID) || address_eq(account_owner, &TOKEN_2022_PROGRAM_ID) {
+            return Ok(());
+        }
+
+        // Verify token program
+        let token_program_id = token_program.address();
+        if !address_eq(token_program_id, &TOKEN_PROGRAM_ID) && !address_eq(token_program_id, &TOKEN_2022_PROGRAM_ID) {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let instruction_data = [1u8]; // CreateIdempotent
+
+        let account_metas = [
+            pinocchio::instruction::InstructionAccount { address: owner.address(), is_writable: true, is_signer: true },
+            pinocchio::instruction::InstructionAccount { address: account.address(), is_writable: true, is_signer: false },
+            pinocchio::instruction::InstructionAccount { address: owner.address(), is_writable: false, is_signer: false },
+            pinocchio::instruction::InstructionAccount { address: mint.address(), is_writable: false, is_signer: false },
+            pinocchio::instruction::InstructionAccount { address: system_program.address(), is_writable: false, is_signer: false },
+            pinocchio::instruction::InstructionAccount { address: token_program_id, is_writable: false, is_signer: false },
+        ];
+
+        let instruction = pinocchio::instruction::InstructionView {
+            program_id: &ASSOCIATED_TOKEN_PROGRAM_ID,
+            accounts: &account_metas,
+            data: &instruction_data,
+        };
+
+        pinocchio::cpi::invoke(&instruction, &[owner, account, mint, system_program, token_program])?;
         Ok(())
     }
 }

@@ -37,10 +37,10 @@ impl HasAccountView for AccountView {
     }
 }
 
-impl<'a> HasAccountView for &'a AccountView {
+impl<T: HasAccountView> HasAccountView for &T {
     #[inline]
     fn account_view(&self) -> &AccountView {
-        self
+        (*self).account_view()
     }
 }
 
