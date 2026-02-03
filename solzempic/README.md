@@ -576,21 +576,51 @@ pub struct CloseParams;  // Also works!
 
 Solzempic supports generating Anchor-compatible IDL JSON from your Rust code. This enables using tools like [Codama](https://github.com/codama-idl/codama) to generate TypeScript SDKs.
 
-#### Setup
+**The IDL generation is fully automatic** - the `#[SolzempicEntrypoint]` macro generates everything you need, including a test that writes the IDL file. No manual binary target required.
+
+#### Quick Start
 
 1. Enable the `idl` feature in your program's `Cargo.toml`:
 
 ```toml
 [features]
 idl = ["solzempic/idl"]
-
-[[bin]]
-name = "gen_idl"
-path = "src/bin/gen_idl.rs"
-required-features = ["idl"]
 ```
 
-2. Use `#[params]` on all parameter structs:
+2. Generate the IDL:
+
+```bash
+cargo test --features idl write_idl -- --ignored
+```
+
+That's it! The IDL is written to `{crate_dir}/idl/{crate_name}.json`.
+
+#### Example Workflow
+
+```bash
+# Generate IDL
+cargo test -p my-program --features idl write_idl -- --ignored
+
+# Copy to project root (optional)
+cp my-program/idl/my-program.json idl/my-program.json
+
+# Generate TypeScript SDK with Codama
+node codama.mjs
+```
+
+For convenience, add a script to your `package.json`:
+
+```json
+{
+  "scripts": {
+    "idl:gen": "cd program && cargo test -p my-program --features idl write_idl -- --ignored 2>/dev/null && cp my-program/idl/my-program.json ../idl/my-program.json"
+  }
+}
+```
+
+#### Decorating Your Code for IDL
+
+Use `#[params]` on all parameter structs:
 
 ```rust
 #[solzempic::params]
@@ -599,7 +629,7 @@ pub struct MyInstructionParams {
 }
 ```
 
-3. Add `#[instruction]` to instruction struct definitions:
+Add `#[instruction]` to instruction struct definitions:
 
 ```rust
 #[instruction]
@@ -609,112 +639,51 @@ pub struct MyInstruction<'a> {
 }
 ```
 
-4. Create a `gen_idl.rs` binary:
-
-```rust
-//! Generate IDL JSON from Rust instruction metadata.
-//! Run with: cargo run --bin gen_idl --features idl
-
-use my_program::IDL_INSTRUCTIONS;
-
-fn main() {
-    println!("{{");
-    println!("  \"version\": \"0.1.0\",");
-    println!("  \"name\": \"my_program\",");
-    println!("  \"instructions\": [");
-
-    for (i, instr) in IDL_INSTRUCTIONS.iter().enumerate() {
-        let comma = if i < IDL_INSTRUCTIONS.len() - 1 { "," } else { "" };
-        println!("    {{");
-        println!("      \"name\": \"{}\",", to_camel_case(instr.name));
-        println!("      \"discriminator\": {},", instr.discriminator);
-        println!("      \"accounts\": [");
-
-        for (j, acc) in instr.accounts.iter().enumerate() {
-            let acc_comma = if j < instr.accounts.len() - 1 { "," } else { "" };
-            println!("        {{");
-            println!("          \"name\": \"{}\",", acc.name);
-            println!("          \"isMut\": {},", acc.is_writable);
-            println!("          \"isSigner\": {}", acc.is_signer);
-            println!("        }}{}", acc_comma);
-        }
-
-        println!("      ],");
-        println!("      \"args\": [");
-
-        for (k, param) in instr.params.iter().enumerate() {
-            let param_comma = if k < instr.params.len() - 1 { "," } else { "" };
-            let type_json = rust_type_to_idl(param.type_name);
-            println!("        {{");
-            println!("          \"name\": \"{}\",", param.name);
-            println!("          \"type\": {}", type_json);
-            println!("        }}{}", param_comma);
-        }
-
-        println!("      ]");
-        println!("    }}{}", comma);
-    }
-
-    println!("  ]");
-    println!("}}");
-}
-
-fn to_camel_case(s: &str) -> String {
-    let mut result = String::new();
-    let mut first = true;
-    for c in s.chars() {
-        if first {
-            result.push(c.to_ascii_lowercase());
-            first = false;
-        } else {
-            result.push(c);
-        }
-    }
-    result
-}
-
-fn rust_type_to_idl(rust_type: &str) -> String {
-    match rust_type {
-        "u8" | "u16" | "u32" | "u64" | "u128" => format!("\"{}\"", rust_type),
-        "i8" | "i16" | "i32" | "i64" | "i128" => format!("\"{}\"", rust_type),
-        "bool" => "\"bool\"".to_string(),
-        "Address" | "Pubkey" => "\"publicKey\"".to_string(),
-        s if s.starts_with("[u8;") => {
-            let len = s.trim_start_matches("[u8;").trim_end_matches(']').trim();
-            format!("{{ \"array\": [\"u8\", {}] }}", len)
-        }
-        _ => format!("\"{}\"", rust_type),
-    }
-}
-```
-
-5. Generate the IDL:
-
-```bash
-cargo run --bin gen_idl --features idl > idl.json
-```
-
 #### How It Works
 
-- `#[params]` generates `ParamsMeta` impl with field names and types
-- `#[instruction]` on struct definitions generates `NUM_ACCOUNTS`, `SHANK_ACCOUNTS`, and `shank_accounts()`
-- `#[instruction]` on impl blocks generates `InstructionParams`, `Instruction` traits, plus `IDL_NAME` and `IDL_PARAMS`
-- `#[SolzempicEntrypoint]` aggregates all instructions into `IDL_INSTRUCTIONS` (when `idl` feature enabled)
+1. `#[params]` generates `ParamsMeta` impl with field names and types
+2. `#[instruction]` on struct definitions generates `NUM_ACCOUNTS`, `SHANK_ACCOUNTS`, and `shank_accounts()`
+3. `#[instruction]` on impl blocks generates `InstructionParams`, `Instruction` traits, plus `IDL_NAME` and `IDL_PARAMS`
+4. `#[SolzempicEntrypoint]` aggregates all instructions into `IDL_INSTRUCTIONS` and generates:
+   - `export_idl()` function that returns the IDL as a JSON string
+   - `write_idl` test (ignored by default) that writes the IDL to disk
 
 The generated IDL is compatible with Anchor's format and can be consumed by Codama for SDK generation.
 
+#### Programmatic Access
+
+If you need programmatic access to the IDL (e.g., for custom tooling), use the `export_idl()` function:
+
+```rust
+#[cfg(feature = "idl")]
+fn main() {
+    let idl_json = my_program::export_idl();
+    println!("{}", idl_json);
+}
+```
+
+#### Why Not `cargo build`?
+
+You might wonder why IDL generation uses `cargo test` instead of `cargo build`. We investigated build-time generation via proc macros, but it **cannot work reliably** due to fundamental Rust compiler limitations:
+
+1. **Non-deterministic expansion order**: Proc macro expansion order across files isn't guaranteed
+2. **Separate compiler instances**: Different files may be compiled by different compiler instances
+3. **No shared state**: Global state in proc macros can't be reliably aggregated during compilation
+
+The test-based approach runs after all code is compiled, giving it access to the complete `IDL_INSTRUCTIONS` constant with all metadata properly aggregated.
+
 #### Limitations
 
-The IDL generation works well for simple programs but has limitations with compound account types:
+The IDL generation works well for most programs but has limitations with compound account types:
 
 **Compound types expand to generic names:**
 
-When you use compound types like `ShardRefMutContext<T>`, the macro expands them to their component fields (`prev`, `current`, `next`). These get generic names in the IDL:
+When you use compound types like `ShardRefMutContext<T>`, the macro expands them to their component fields. These get generic names in the IDL:
 
 ```rust
 #[instruction]
 pub struct MyInstruction<'a> {
-    pub shards: ShardRefMutContext<'a, MyHeader>,  // Expands to leftShard, currentShard, rightShard
+    pub shards: ShardRefMutContext<'a, MyHeader>,  // Expands to low_shard, current_shard, high_shard
 }
 ```
 
@@ -725,22 +694,20 @@ If an instruction has multiple fields of the same compound type, you get duplica
 ```rust
 #[instruction]
 pub struct MatchOrders<'a> {
-    pub clmm_shards: ShardRefMutContext<'a, ClmmHeader>,   // → leftShard, currentShard, rightShard
-    pub limit_shards: ShardRefMutContext<'a, LimitHeader>, // → leftShard, currentShard, rightShard (duplicates!)
+    pub clmm_shards: ShardRefMutContext<'a, ClmmHeader>,   // → low_shard, current_shard, high_shard
+    pub limit_shards: ShardRefMutContext<'a, LimitHeader>, // → low_shard, current_shard, high_shard (duplicates!)
 }
 ```
-
-The generated IDL would have duplicate `leftShard`, `currentShard`, `rightShard` entries, which breaks SDK generation.
 
 **Recommendations for complex programs:**
 
 For programs with compound account types used multiple times:
 
-1. **Manual IDL**: Write the IDL by hand with unique prefixed names (`clmmShardPrev`, `limitShardPrev`, etc.)
-2. **Post-process**: Generate IDL and manually fix duplicate names
-3. **Separate instructions**: Split into multiple instructions each using one compound type
+1. **Post-process**: Generate IDL and manually fix duplicate names with prefixes
+2. **Manual IDL**: Write the IDL by hand with unique prefixed names (`clmmLowShard`, `limitLowShard`, etc.)
+3. **Codama visitors**: Use Codama's visitor pattern to rename accounts during SDK generation
 
-For simpler programs without these patterns, the automated IDL generation works well.
+For simpler programs without these patterns, the automated IDL generation works perfectly.
 
 ## Comparison to Alternatives
 

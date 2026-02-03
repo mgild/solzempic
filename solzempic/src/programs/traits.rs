@@ -44,6 +44,7 @@ impl<T: HasAccountView> HasAccountView for &T {
     }
 }
 
+
 /// Trait for validated program and sysvar account wrappers.
 ///
 /// `ValidatedAccount` provides a consistent interface for wrapping accounts

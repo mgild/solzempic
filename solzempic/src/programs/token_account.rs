@@ -405,6 +405,21 @@ impl<'a> TokenAccountRefMut<'a> {
         pinocchio::cpi::invoke(&instruction, &[owner, account, mint, system_program, token_program])?;
         Self::load(account)
     }
+
+    /// Initialize an ATA if it doesn't exist, otherwise load existing.
+    ///
+    /// Alias for [`init`](Self::init) - provided for semantic clarity when
+    /// the account may or may not already exist.
+    #[inline]
+    pub fn init_if_needed(
+        account: &'a AccountView,
+        owner: impl HasAccountView,
+        mint: impl HasAccountView,
+        system_program: impl HasAccountView,
+        token_program: impl HasAccountView,
+    ) -> Result<Self, ProgramError> {
+        Self::init(account, owner, mint, system_program, token_program)
+    }
 }
 
 impl<'a> HasAccountView for TokenAccountRefMut<'a> {
