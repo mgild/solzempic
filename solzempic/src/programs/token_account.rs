@@ -359,15 +359,15 @@ impl<'a> TokenAccountRefMut<'a> {
     /// Create or initialize an ATA where the owner pays for their own account.
     ///
     /// Convenience wrapper for [`init_ata`](Self::init_ata) when payer == owner.
-    /// Does not require ata_program account since the program ID is a constant.
+    /// Returns the initialized token account wrapper.
     #[inline]
-    pub fn init_ata_for_self(
-        account: &AccountView,
+    pub fn init(
+        account: &'a AccountView,
         owner: impl HasAccountView,
         mint: impl HasAccountView,
         system_program: impl HasAccountView,
         token_program: impl HasAccountView,
-    ) -> Result<(), ProgramError> {
+    ) -> Result<Self, ProgramError> {
         let owner = owner.account_view();
         let mint = mint.account_view();
         let system_program = system_program.account_view();
@@ -376,7 +376,7 @@ impl<'a> TokenAccountRefMut<'a> {
         // Skip CPI if already initialized
         let account_owner = unsafe { account.owner() };
         if address_eq(account_owner, &TOKEN_PROGRAM_ID) || address_eq(account_owner, &TOKEN_2022_PROGRAM_ID) {
-            return Ok(());
+            return Self::load(account);
         }
 
         // Verify token program
@@ -403,7 +403,7 @@ impl<'a> TokenAccountRefMut<'a> {
         };
 
         pinocchio::cpi::invoke(&instruction, &[owner, account, mint, system_program, token_program])?;
-        Ok(())
+        Self::load(account)
     }
 }
 
