@@ -620,22 +620,154 @@ For convenience, add a script to your `package.json`:
 
 #### Decorating Your Code for IDL
 
-Use `#[params]` on all parameter structs:
+To generate complete IDL, decorate your code with these macros:
+
+##### 1. Instruction Parameters (`#[params]`)
+
+Use `#[params]` on all parameter structs. This generates the `args` section in the IDL:
 
 ```rust
 #[solzempic::params]
-pub struct MyInstructionParams {
+pub struct TransferParams {
     pub amount: u64,
+    pub memo: [u8; 32],
+}
+
+// Unit struct for instructions with no parameters
+#[solzempic::params]
+pub struct CloseParams;
+```
+
+##### 2. Instruction Struct (`#[instruction]`)
+
+Use `#[instruction]` on instruction struct definitions. This generates the `accounts` section in the IDL:
+
+```rust
+use solzempic::instruction;
+
+#[instruction]
+pub struct Transfer<'a> {
+    pub source: AccountRefMut<'a, TokenAccount>,   // isMut: true, isSigner: false
+    pub destination: AccountRefMut<'a, TokenAccount>,
+    pub authority: Signer<'a>,                      // isMut: false, isSigner: true
+    pub payer: Payer<'a>,                           // isMut: true, isSigner: true
+    pub token_program: TokenProgram<'a>,            // program account
 }
 ```
 
-Add `#[instruction]` to instruction struct definitions:
+Account types are automatically inferred from wrapper types:
+
+| Wrapper Type | `isMut` | `isSigner` | Notes |
+|--------------|---------|------------|-------|
+| `AccountRef<T>` | false | false | Read-only account |
+| `AccountRefMut<T>` | true | false | Writable account |
+| `Signer` | false | true | Signer only |
+| `Payer` / `MutSigner` | true | true | Writable signer |
+| `SystemProgram` | false | false | Program account |
+| `TokenProgram` | false | false | Program account |
+| `ShardRefContext<T>` | false | false | Expands to 3 accounts |
+| `ShardRefMutContext<T>` | true | false | Expands to 3 accounts |
+
+##### 3. Instruction Implementation (`#[instruction(Params)]`)
+
+Use `#[instruction(ParamsType)]` on the impl block to link the instruction to its parameters:
 
 ```rust
+#[instruction(TransferParams)]
+impl<'a> Transfer<'a> {
+    fn build(accounts: &'a [AccountView], params: &TransferParams) -> Result<Self, ProgramError> {
+        // Parse accounts...
+    }
+
+    fn validate(&self, program_id: &Address, params: &TransferParams) -> ProgramResult {
+        // Validate state...
+    }
+
+    fn execute(&mut self, program_id: &Address, params: &TransferParams) -> ProgramResult {
+        // Execute logic...
+    }
+}
+```
+
+##### 4. Account Types (`#[account(discriminator = ...)]`)
+
+Use `#[account]` on account struct definitions to include them in the IDL's `accounts` and `types` sections:
+
+```rust
+#[solzempic::account(discriminator = AccountType::Counter)]
+pub struct Counter {
+    pub discriminator: [u8; 8],
+    pub owner: Address,
+    pub count: u64,
+    pub bump: u8,
+    pub _padding: [u8; 7],
+}
+```
+
+##### 5. Entrypoint Enum
+
+The `#[SolzempicEntrypoint]` on your instruction enum ties everything together:
+
+```rust
+#[SolzempicEntrypoint("YourProgramId111111111111111111111111111111")]
+pub enum MyInstruction {
+    Initialize = 0,
+    Transfer = 1,
+    Close = 2,
+}
+```
+
+##### Complete Example
+
+```rust
+// lib.rs
+use solzempic::{SolzempicEntrypoint, instruction, params};
+
+#[SolzempicEntrypoint("Counter11111111111111111111111111111111111")]
+pub enum CounterInstruction {
+    Initialize = 0,
+    Increment = 1,
+}
+
+// params
+#[params]
+pub struct InitializeParams {
+    pub initial_value: u64,
+}
+
+#[params]
+pub struct IncrementParams {
+    pub amount: u64,
+}
+
+// instruction structs
 #[instruction]
-pub struct MyInstruction<'a> {
-    pub account: AccountRefMut<'a, MyAccount>,
-    pub signer: Signer<'a>,
+pub struct Initialize<'a> {
+    pub counter: AccountRefMut<'a, Counter>,
+    pub authority: Signer<'a>,
+    pub payer: Payer<'a>,
+    pub system_program: SystemProgram<'a>,
+}
+
+#[instruction]
+pub struct Increment<'a> {
+    pub counter: AccountRefMut<'a, Counter>,
+    pub authority: Signer<'a>,
+}
+
+// instruction impls
+#[instruction(InitializeParams)]
+impl<'a> Initialize<'a> { /* ... */ }
+
+#[instruction(IncrementParams)]
+impl<'a> Increment<'a> { /* ... */ }
+
+// account type
+#[solzempic::account(discriminator = 1)]
+pub struct Counter {
+    pub discriminator: [u8; 8],
+    pub authority: Address,
+    pub count: u64,
 }
 ```
 
