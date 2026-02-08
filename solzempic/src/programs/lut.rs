@@ -3,7 +3,7 @@
 //! This module provides [`Lut`], a wrapper for Address Lookup Table accounts
 //! that handles both initialized and uninitialized states.
 
-use pinocchio::{AccountView, error::ProgramError};
+use pinocchio::{AccountView, error::ProgramError, cpi::Signer};
 use solana_address::{Address, address_eq};
 
 use super::ids::{ADDRESS_LOOKUP_TABLE_PROGRAM_ID, SYSTEM_PROGRAM_ID};
@@ -116,6 +116,175 @@ impl<'a> Lut<'a> {
     #[inline]
     pub fn needs_init(&self) -> bool {
         !self.initialized
+    }
+
+    /// Create a new Address Lookup Table.
+    ///
+    /// # Arguments
+    /// * `pda_builder` - PDA builder containing payer and system_program
+    /// * `authority` - The authority account (will be the LUT owner)
+    /// * `recent_slot` - Recent slot for PDA derivation
+    /// * `signer_seeds` - Optional seeds if authority is a PDA
+    ///
+    /// # Example
+    /// ```ignore
+    /// let lut = Lut::wrap(&accounts[0])?;
+    /// lut.create(
+    ///     &pda_builder,
+    ///     market.info,
+    ///     lut_slot,
+    ///     Some(&signer_seeds),
+    /// )?;
+    /// ```
+    #[inline]
+    pub fn create<'b>(
+        &self,
+        pda_builder: &crate::PdaInitBuilder<'b>,
+        authority: &'b AccountView,
+        recent_slot: u64,
+        signer_seeds: &[pinocchio::cpi::Seed<'b>],
+    ) -> Result<(), ProgramError> {
+        let payer = pda_builder.payer();
+        let system_program = pda_builder.system_program();
+
+        // ALT program ID is the expected owner of the LUT account
+        let alt_program_id = &ADDRESS_LOOKUP_TABLE_PROGRAM_ID;
+
+        // Derive bump for LUT
+        let (_, bump) = Address::find_program_address(
+            &[authority.address().as_ref(), &recent_slot.to_le_bytes()],
+            alt_program_id,
+        );
+
+        // CreateLookupTable instruction = 0
+        // Data: [discriminator(4), recent_slot(8), bump(1)]
+        let mut instruction_data = [0u8; 13];
+        instruction_data[0..4].copy_from_slice(&0u32.to_le_bytes());
+        instruction_data[4..12].copy_from_slice(&recent_slot.to_le_bytes());
+        instruction_data[12] = bump;
+
+        let account_metas = [
+            pinocchio::instruction::InstructionAccount {
+                address: self.info.address(),
+                is_writable: true,
+                is_signer: false,
+            },
+            pinocchio::instruction::InstructionAccount {
+                address: authority.address(),
+                is_writable: false,
+                is_signer: true,
+            },
+            pinocchio::instruction::InstructionAccount {
+                address: payer.address(),
+                is_writable: true,
+                is_signer: true,
+            },
+            pinocchio::instruction::InstructionAccount {
+                address: system_program.address(),
+                is_writable: false,
+                is_signer: false,
+            },
+        ];
+
+        let instruction = pinocchio::instruction::InstructionView {
+            program_id: alt_program_id,
+            accounts: &account_metas,
+            data: &instruction_data,
+        };
+
+        let signer = Signer::from(signer_seeds);
+        pinocchio::cpi::invoke_signed(
+            &instruction,
+            &[self.info, authority, payer, system_program],
+            &[signer],
+        )
+    }
+
+    /// Extend the Lookup Table with new addresses.
+    ///
+    /// # Arguments
+    /// * `pda_builder` - PDA builder containing payer and system_program
+    /// * `authority` - The authority account (must be LUT owner)
+    /// * `addresses` - Slice of addresses to add to the LUT
+    /// * `signer_seeds` - Optional seeds if authority is a PDA
+    ///
+    /// # Example
+    /// ```ignore
+    /// let lut = Lut::wrap(&accounts[0])?;
+    /// lut.extend(
+    ///     &pda_builder,
+    ///     market.info,
+    ///     &lut_addresses,
+    ///     Some(&signer_seeds),
+    /// )?;
+    /// ```
+    #[inline]
+    pub fn extend<'b>(
+        &self,
+        pda_builder: &crate::PdaInitBuilder<'b>,
+        authority: &'b AccountView,
+        addresses: &[&Address],
+        signer_seeds: &[pinocchio::cpi::Seed<'b>],
+    ) -> Result<(), ProgramError> {
+        let payer = pda_builder.payer();
+        let system_program = pda_builder.system_program();
+
+        // ALT program ID is the expected owner of the LUT account
+        let alt_program_id = &ADDRESS_LOOKUP_TABLE_PROGRAM_ID;
+        // ExtendLookupTable instruction = 2
+        // Data: [discriminator(4), num_addresses(8), addresses(32 * n)]
+        let num_addresses = addresses.len() as u64;
+        let data_len = 4 + 8 + 32 * addresses.len();
+
+        // Use stack buffer for small extensions, heap for larger
+        // Market init needs 33 addresses (28 accounts + 4 sysvars + braid program)
+        let mut data_buf = [0u8; 4 + 8 + 32 * 40]; // Max 40 addresses on stack
+        if data_len > data_buf.len() {
+            return Err(ProgramError::InvalidArgument);
+        }
+
+        data_buf[0..4].copy_from_slice(&2u32.to_le_bytes());
+        data_buf[4..12].copy_from_slice(&num_addresses.to_le_bytes());
+        for (i, addr) in addresses.iter().enumerate() {
+            let offset = 12 + i * 32;
+            data_buf[offset..offset + 32].copy_from_slice(addr.as_ref());
+        }
+
+        let account_metas = [
+            pinocchio::instruction::InstructionAccount {
+                address: self.info.address(),
+                is_writable: true,
+                is_signer: false,
+            },
+            pinocchio::instruction::InstructionAccount {
+                address: authority.address(),
+                is_writable: false,
+                is_signer: true,
+            },
+            pinocchio::instruction::InstructionAccount {
+                address: payer.address(),
+                is_writable: true,
+                is_signer: true,
+            },
+            pinocchio::instruction::InstructionAccount {
+                address: system_program.address(),
+                is_writable: false,
+                is_signer: false,
+            },
+        ];
+
+        let instruction = pinocchio::instruction::InstructionView {
+            program_id: alt_program_id,
+            accounts: &account_metas,
+            data: &data_buf[..data_len],
+        };
+
+        let signer = Signer::from(signer_seeds);
+        pinocchio::cpi::invoke_signed(
+            &instruction,
+            &[self.info, authority, payer, system_program],
+            &[signer],
+        )
     }
 }
 

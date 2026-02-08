@@ -608,6 +608,18 @@ impl<'a> PdaInitBuilder<'a> {
         Self { payer, system_program }
     }
 
+    /// Get the payer account.
+    #[inline]
+    pub fn payer(&self) -> &'a pinocchio::AccountView {
+        self.payer
+    }
+
+    /// Get the system program account.
+    #[inline]
+    pub fn system_program(&self) -> &'a pinocchio::AccountView {
+        self.system_program
+    }
+
     /// Initialize a PDA account with the given seeds and size.
     ///
     /// # Type Parameters
