@@ -523,7 +523,7 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
         info: &'a AccountView,
         payer: &AccountView,
         system_program: &AccountView,
-        seeds: &[&[u8]],
+        seeds: &[pinocchio::cpi::Seed],
         space: usize,
     ) -> Result<Self, ProgramError> {
         if !info.is_writable() {
@@ -533,7 +533,7 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
         // Extract bump from seeds (last byte of last seed)
         let pda_bump = seeds
             .last()
-            .and_then(|last_seed| last_seed.last())
+            .and_then(|last_seed| last_seed.as_ref().last())
             .copied();
 
         // Create account via CPI (seeds should include bump)
@@ -639,7 +639,7 @@ impl<'a> PdaInitBuilder<'a> {
     pub fn init_pda<T, F>(
         &self,
         account: &'a pinocchio::AccountView,
-        seeds: &[&[u8]],
+        seeds: &[pinocchio::cpi::Seed],
     ) -> Result<AccountRefMut<'a, T, F>, pinocchio::error::ProgramError>
     where
         T: crate::traits::Initializable,
@@ -683,7 +683,7 @@ impl<'a> PdaInitBuilder<'a> {
         P: crate::traits::Pda,
         P::AccountType: crate::traits::Initializable,
         F: crate::Framework,
-        for<'b> P::Seeds<'b>: AsRef<[&'b [u8]]>,
+        for<'b> P::Seeds<'b>: AsRef<[pinocchio::cpi::Seed<'b>]>,
     {
         let seeds = pda.seeds();
         AccountRefMut::init_pda(
@@ -723,7 +723,7 @@ impl<'a> PdaInitBuilder<'a> {
     ) -> Result<(), pinocchio::error::ProgramError>
     where
         P: crate::traits::Pda,
-        for<'b> P::Seeds<'b>: AsRef<[&'b [u8]]>,
+        for<'b> P::Seeds<'b>: AsRef<[pinocchio::cpi::Seed<'b>]>,
     {
         let seeds = pda.seeds();
         let seeds_slice = seeds.as_ref();

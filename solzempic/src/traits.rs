@@ -183,8 +183,8 @@ pub trait Pda {
     /// The account type this PDA is for (use `()` if not type-specific)
     type AccountType;
 
-    /// The seeds array type (e.g., `[&[u8]; 4]`)
-    type Seeds<'a>: AsRef<[&'a [u8]]>
+    /// The seeds array type (e.g., `[Seed; 4]`)
+    type Seeds<'a>: AsRef<[pinocchio::cpi::Seed<'a>]>
     where
         Self: 'a;
 
@@ -200,7 +200,7 @@ pub trait Pda {
 /// Implementors define how to build the seeds array from their fields
 /// plus the bump seed. Used with `PdaBase<S>` for generic PDA construction.
 pub trait PdaSeeds {
-    type Seeds<'a>: AsRef<[&'a [u8]]>
+    type Seeds<'a>: AsRef<[pinocchio::cpi::Seed<'a>]>
     where
         Self: 'a;
 

@@ -244,7 +244,7 @@ pub fn create_pda_account<'a>(
     new_account: &'a AccountView,
     program_id: &Address,
     space: usize,
-    seeds: &[&[u8]],
+    seeds: &[Seed],
 ) -> Result<(), ProgramError> {
     let lamports = rent_exempt_minimum(space);
 
@@ -278,17 +278,7 @@ pub fn create_pda_account<'a>(
     // Only pass the 2 accounts referenced by the instruction (matches pinocchio-system)
     let account_infos = &[payer, new_account];
 
-    // Convert &[&[u8]] to [Seed] for invoke_signed
-    // Support up to 6 seeds (e.g., ["market", token_a, token_b, seed, bump, extra])
-    let seed_refs: [Seed; 6] = [
-        Seed::from(seeds.first().copied().unwrap_or(&[])),
-        Seed::from(seeds.get(1).copied().unwrap_or(&[])),
-        Seed::from(seeds.get(2).copied().unwrap_or(&[])),
-        Seed::from(seeds.get(3).copied().unwrap_or(&[])),
-        Seed::from(seeds.get(4).copied().unwrap_or(&[])),
-        Seed::from(seeds.get(5).copied().unwrap_or(&[])),
-    ];
-    let seed_count = seeds.len().min(6);
-    let signer = Signer::from(&seed_refs[..seed_count]);
+    // Seeds are already Seed types, just use them directly
+    let signer = Signer::from(seeds);
     invoke_signed(&instruction, account_infos, &[signer])
 }
