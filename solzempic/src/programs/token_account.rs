@@ -436,30 +436,29 @@ impl<'a> HasAccountView for TokenAccountRefMut<'a> {
 ///
 /// # Example
 /// ```ignore
-/// // For init() - returns TokenAccountRefMut
-/// let builder = TokenAccountInitBuilder::new(&owner, &system_program);
-/// let user_token_a = builder.build(&accounts[6], &mint_a, &token_program_a)?;
-/// let user_token_b = builder.build(&accounts[7], &mint_b, &token_program_b)?;
+/// // Fluent API - set payer once, reuse with different owners
+/// let ata_builder = TokenAccountInitBuilder::new(&system_program).with_payer(&payer);
+/// let protocol_builder = ata_builder.with_owner(&protocol);
+/// let market_builder = ata_builder.with_owner(&market);
 ///
-/// // For init_ata() - idempotent ATA creation with custom payer and owner
-/// let builder = TokenAccountInitBuilder::new_with_payer(&payer, &owner, &system_program);
-/// builder.init_ata(&accounts[8], &mint_a, &token_program_a)?;
-/// builder.init_ata(&accounts[9], &mint_b, &token_program_b)?;
+/// protocol_builder.init_ata(&accounts[8], &mint_a, &token_program_a)?;
+/// market_builder.init_ata(&accounts[9], &mint_b, &token_program_b)?;
 /// ```
+#[derive(Clone, Copy)]
 pub struct TokenAccountInitBuilder<'a> {
     payer: Option<&'a AccountView>,
-    owner: &'a AccountView,
+    owner: Option<&'a AccountView>,
     system_program: &'a AccountView,
 }
 
 impl<'a> TokenAccountInitBuilder<'a> {
-    /// Create a new builder with shared owner and system_program accounts.
-    /// Use this for `build()` when owner pays for their own account.
+    /// Create a new builder with just the system_program.
+    /// Chain with `.with_payer()` and `.with_owner()` to set other parameters.
     #[inline]
-    pub fn new(owner: &'a AccountView, system_program: &'a AccountView) -> Self {
+    pub fn new(system_program: &'a AccountView) -> Self {
         Self {
             payer: None,
-            owner,
+            owner: None,
             system_program,
         }
     }
@@ -474,8 +473,26 @@ impl<'a> TokenAccountInitBuilder<'a> {
     ) -> Self {
         Self {
             payer: Some(payer),
-            owner,
+            owner: Some(owner),
             system_program,
+        }
+    }
+
+    /// Set the payer account. Returns a new builder with payer set.
+    #[inline]
+    pub fn with_payer(self, payer: &'a AccountView) -> Self {
+        Self {
+            payer: Some(payer),
+            ..self
+        }
+    }
+
+    /// Set the owner account. Returns a new builder with owner set.
+    #[inline]
+    pub fn with_owner(self, owner: &'a AccountView) -> Self {
+        Self {
+            owner: Some(owner),
+            ..self
         }
     }
 
@@ -488,9 +505,10 @@ impl<'a> TokenAccountInitBuilder<'a> {
         mint: &'a AccountView,
         token_program: &'a AccountView,
     ) -> Result<TokenAccountRefMut<'a>, ProgramError> {
+        let owner = self.owner.ok_or(ProgramError::NotEnoughAccountKeys)?;
         TokenAccountRefMut::init(
             ata,
-            self.owner,
+            owner,
             mint,
             self.system_program,
             token_program,
@@ -498,7 +516,7 @@ impl<'a> TokenAccountInitBuilder<'a> {
     }
 
     /// Initialize an ATA idempotently using `TokenAccountRefMut::init_ata()`.
-    /// Requires `new_with_payer()` to set the payer account.
+    /// Requires both payer and owner to be set via fluent methods.
     /// Returns a loaded `TokenAccountRefMut` wrapper for the initialized account.
     #[inline]
     pub fn init_ata(
@@ -508,10 +526,11 @@ impl<'a> TokenAccountInitBuilder<'a> {
         token_program: impl HasAccountView,
     ) -> Result<TokenAccountRefMut<'a>, ProgramError> {
         let payer = self.payer.ok_or(ProgramError::NotEnoughAccountKeys)?;
+        let owner = self.owner.ok_or(ProgramError::NotEnoughAccountKeys)?;
         TokenAccountRefMut::init_ata(
             ata,
             payer,
-            self.owner,
+            owner,
             mint,
             self.system_program,
             token_program,
