@@ -123,6 +123,7 @@ impl<'a> Signer<'a> {
     }
 }
 
+
 /// Type alias for payer accounts.
 ///
 /// `Payer` is semantically identical to [`Signer`], but signals that
@@ -225,6 +226,7 @@ impl<'a> MutSigner<'a> {
     }
 }
 
+
 /// Explicit wrapper for writable raw account references.
 ///
 /// Use `Writable` when you have a raw `&AccountView` that needs to be
@@ -295,6 +297,7 @@ impl<'a> Writable<'a> {
     }
 }
 
+
 /// Explicit wrapper for readonly raw account references.
 ///
 /// Use `ReadOnly` when you have a raw `&AccountView` that should be
@@ -358,3 +361,4 @@ impl<'a> ReadOnly<'a> {
         self.info.address()
     }
 }
+

@@ -9,6 +9,27 @@
 use pinocchio::{error::ProgramError, AccountView};
 use solana_address::Address;
 
+/// Trait for types that can provide an address.
+///
+/// This trait enables ergonomic function signatures that accept
+/// `AccountView`, `AccountRef`, `AccountRefMut`, or any validated wrapper.
+///
+/// # Example
+///
+/// ```ignore
+/// fn check_owner(account: &impl HasAddress) -> bool {
+///     account.address() == &expected_address
+/// }
+///
+/// // All work:
+/// check_owner(&account_view);
+/// check_owner(&account_ref);
+/// check_owner(&signer);
+/// ```
+pub trait HasAddress {
+    fn address(&self) -> &Address;
+}
+
 /// Trait for types that can provide a reference to an AccountView.
 ///
 /// This trait enables ergonomic function signatures that accept both
@@ -29,6 +50,14 @@ use solana_address::Address;
 pub trait HasAccountView {
     fn account_view(&self) -> &AccountView;
 }
+
+impl HasAddress for AccountView {
+    #[inline]
+    fn address(&self) -> &Address {
+        self.address()
+    }
+}
+
 
 impl HasAccountView for AccountView {
     #[inline]
@@ -160,11 +189,11 @@ pub trait ValidatedAccount<'a>: Sized {
     /// This provides access to all AccountView fields for advanced use cases.
     fn info(&self) -> &'a AccountView;
 
-    /// Get the account's address.
+    /// Get the account's public key.
     ///
     /// Convenience method equivalent to `self.info().address()`.
     #[inline]
-    fn address(&self) -> &'a Address {
+    fn pubkey(&self) -> &'a Address {
         self.info().address()
     }
 }

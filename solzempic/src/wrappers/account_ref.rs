@@ -223,3 +223,10 @@ impl<'a, T: Loadable, F: Framework> AsAccountRef<'a, T, F> for AccountRef<'a, T,
         (self.info.address().as_ref() == expected.as_ref(), bump)
     }
 }
+
+impl<'a, T: Loadable, F: Framework> crate::HasAddress for AccountRef<'a, T, F> {
+    #[inline]
+    fn address(&self) -> &Address {
+        self.info.address()
+    }
+}

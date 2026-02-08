@@ -122,6 +122,7 @@ impl<'a> TryFrom<&'a AccountView> for Mint<'a> {
     }
 }
 
+
 impl<'a> Mint<'a> {
     // SPL Token Mint layout (82 bytes):
     // 0-4:   mint_authority COption discriminant
@@ -229,6 +230,63 @@ impl<'a> Mint<'a> {
     #[inline]
     pub fn is_token_2022(&self) -> bool {
         address_eq(unsafe { self.info.owner() }, &TOKEN_2022_PROGRAM_ID)
+    }
+
+    /// Check if mint has TransferFee or TransferHook extensions.
+    ///
+    /// These Token-2022 extensions are commonly problematic for DEX programs:
+    /// - **TransferFee**: Automatically withholds fees during transfers,
+    ///   causing vault accounting mismatches if the program uses plain `transfer` CPI.
+    /// - **TransferHook**: Invokes arbitrary programs during transfers,
+    ///   which could re-enter or block settlement.
+    ///
+    /// Returns `true` if either extension is present (Token-2022 only).
+    /// Returns `false` for SPL Token mints or Token-2022 without these extensions.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// if mint.has_unsupported_extensions() {
+    ///     return Err(ProgramError::InvalidAccountData);
+    /// }
+    /// ```
+    #[inline]
+    pub fn has_unsupported_extensions(&self) -> bool {
+        const MINT_SIZE: usize = 82;
+        const TRANSFER_FEE_CONFIG: u16 = 1;
+        const TRANSFER_HOOK: u16 = 13;
+
+        let data = unsafe { self.info.borrow_unchecked() };
+
+        if data.len() <= MINT_SIZE {
+            return false; // No extensions
+        }
+
+        // Extensions start after base mint data + account type byte
+        let extensions_start = MINT_SIZE + 1;
+        if data.len() < extensions_start + 4 {
+            return false;
+        }
+
+        // Parse TLV (Type-Length-Value) extensions
+        let mut offset = extensions_start;
+        while offset + 4 <= data.len() {
+            let ext_type = u16::from_le_bytes([data[offset], data[offset + 1]]);
+            let ext_len = u16::from_le_bytes([data[offset + 2], data[offset + 3]]) as usize;
+            offset += 4;
+
+            if offset + ext_len > data.len() {
+                break;
+            }
+
+            if ext_type == TRANSFER_FEE_CONFIG || ext_type == TRANSFER_HOOK {
+                return true;
+            }
+
+            offset += ext_len;
+        }
+
+        false
     }
 }
 

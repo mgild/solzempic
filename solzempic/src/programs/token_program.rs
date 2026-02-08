@@ -100,6 +100,7 @@ impl<'a> TryFrom<&'a AccountView> for TokenProgram<'a> {
     }
 }
 
+
 impl<'a> TokenProgram<'a> {
     /// Check if this is the Token-2022 program.
     ///

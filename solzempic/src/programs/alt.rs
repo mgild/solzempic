@@ -90,3 +90,4 @@ impl<'a> TryFrom<&'a AccountView> for AltProgram<'a> {
         Self::wrap(info)
     }
 }
+

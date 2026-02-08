@@ -90,3 +90,4 @@ impl<'a> TryFrom<&'a AccountView> for AtaProgram<'a> {
         Self::wrap(info)
     }
 }
+

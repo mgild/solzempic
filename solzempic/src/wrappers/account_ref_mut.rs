@@ -593,6 +593,14 @@ impl<'a, T: Loadable, F: Framework> AsAccountRef<'a, T, F> for AccountRefMut<'a,
 /// let vault_pda = Vault::find_pda(market, idx, &PROGRAM_ID);
 /// let vault = pda_builder.init_pda::<Vault>(&accounts[6], &vault_pda)?;
 /// ```
+
+impl<'a, T: Loadable, F: Framework> crate::HasAddress for AccountRefMut<'a, T, F> {
+    #[inline]
+    fn address(&self) -> &Address {
+        self.info.address()
+    }
+}
+
 pub struct PdaInitBuilder<'a> {
     payer: &'a pinocchio::AccountView,
     system_program: &'a pinocchio::AccountView,
