@@ -111,6 +111,40 @@ fn to_snake_case(s: &str) -> String {
     result
 }
 
+const EVENT_PREFIX: &[u8] = b"event:";
+
+/// Calculate an 8-byte discriminator for an event type.
+///
+/// Uses the first 8 bytes of SHA256("event:<EventName>").
+/// This matches Anchor's event discriminator format.
+fn event_discriminator(name: &str) -> [u8; 8] {
+    use sha2::{Digest, Sha256};
+
+    // Anchor format: sha256("event:<EventName>")
+    // Use stack allocation for name bytes (event names are typically < 64 chars)
+    let name_bytes = name.as_bytes();
+    const MAX_NAME_LEN: usize = 128;
+
+    let hash = if name_bytes.len() <= MAX_NAME_LEN {
+        // Stack allocation for typical event names
+        let mut buf = [0u8; EVENT_PREFIX.len() + MAX_NAME_LEN];
+        buf[..EVENT_PREFIX.len()].copy_from_slice(EVENT_PREFIX);
+        buf[EVENT_PREFIX.len()..EVENT_PREFIX.len() + name_bytes.len()].copy_from_slice(name_bytes);
+        Sha256::digest(&buf[..EVENT_PREFIX.len() + name_bytes.len()])
+    } else {
+        // Fallback to heap for very long names (rare)
+        let mut preimage = Vec::with_capacity(EVENT_PREFIX.len() + name_bytes.len());
+        preimage.extend_from_slice(EVENT_PREFIX);
+        preimage.extend_from_slice(name_bytes);
+        Sha256::digest(&preimage)
+    };
+
+    // Take first 8 bytes
+    let mut disc = [0u8; 8];
+    disc.copy_from_slice(&hash[..8]);
+    disc
+}
+
 /// Attribute macro for complete Solana program setup.
 ///
 /// This is the main entry point for defining a Solzempic program. It generates
@@ -1279,4 +1313,147 @@ fn type_to_string(ty: &Type) -> String {
         }
         _ => quote!(#ty).to_string(),
     }
+}
+
+/// Attribute macro for event structs.
+///
+/// Generates an event type with zero-overhead serialization and IDL metadata.
+/// Events are emitted via `emit!()` macro and logged to transaction logs
+/// in base64 format.
+///
+/// # What It Generates
+///
+/// | Generated | Purpose |
+/// |-----------|---------|
+/// | `#[repr(C)]` | Stable C layout for zero-copy serialization |
+/// | `Pod + Zeroable` | Safe zero-copy casting via bytemuck |
+/// | `impl Event` | Event trait with discriminator and name |
+/// | `EventIdlMeta` impl | IDL metadata for event fields |
+/// | Inventory registration | Auto-collection for IDL generation |
+///
+/// # Discriminator
+///
+/// Events use 8-byte discriminators generated from SHA256("event:<EventName>").
+/// This matches Anchor's event discriminator format.
+///
+/// # Performance
+///
+/// - Serialization: 0 CUs (zero-copy via bytemuck)
+/// - Logging: ~1000 CUs + size overhead
+///
+/// Events use C struct layout with no serialization overhead.
+///
+/// # Example
+///
+/// ```ignore
+/// use solzempic::event;
+///
+/// #[event]
+/// pub struct TransferEvent {
+///     pub from: Address,
+///     pub to: Address,
+///     pub amount: u64,
+///     pub timestamp: i64,
+/// }
+///
+/// // In your instruction:
+/// emit!(TransferEvent {
+///     from: *source.key(),
+///     to: *destination.key(),
+///     amount: params.amount,
+///     timestamp: Clock::get()?.unix_timestamp,
+/// });
+/// ```
+///
+/// # Field Requirements
+///
+/// All fields must be `Pod`-safe types (no padding, no references):
+/// - ✓ `u8`, `u16`, `u32`, `u64`, `u128`, `i8`, `i16`, `i32`, `i64`, `i128`
+/// - ✓ `Address`, `[u8; N]`
+/// - ✗ `bool` (use `u8`), `String`, `Vec<T>`, references
+///
+/// # Panics
+///
+/// Compile-time panics if:
+/// - Applied to non-struct (enum, union)
+/// - Struct has unnamed fields (tuple struct)
+#[proc_macro_attribute]
+pub fn event(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemStruct);
+    let name = &input.ident;
+    let vis = &input.vis;
+    let attrs = &input.attrs;
+
+    let fields = match &input.fields {
+        Fields::Named(fields_named) => &fields_named.named,
+        _ => panic!("event macro only supports structs with named fields"),
+    };
+
+    let field_defs = fields.iter().map(|f| {
+        let field_name = &f.ident;
+        let field_ty = &f.ty;
+        let field_vis = &f.vis;
+        let field_attrs = &f.attrs;
+        quote! {
+            #(#field_attrs)*
+            #field_vis #field_name: #field_ty
+        }
+    });
+
+    // Generate field metadata for IDL
+    let field_metas: Vec<_> = fields.iter().map(|f| {
+        let field_name = f.ident.as_ref().expect("named field").to_string();
+        let field_type = type_to_string(&f.ty);
+        quote! {
+            ::solzempic::EventFieldMeta {
+                name: #field_name,
+                type_name: #field_type,
+            }
+        }
+    }).collect();
+
+    let name_str = name.to_string();
+
+    // Calculate discriminator from name
+    let discriminator = event_discriminator(&name_str);
+    let disc_array = quote! { [#(#discriminator),*] };
+
+    let expanded = quote! {
+        #[repr(C)]
+        #[derive(Clone, Copy)]
+        #(#attrs)*
+        #vis struct #name {
+            #(#field_defs),*
+        }
+
+        // Safety: Event struct is #[repr(C)] with Pod-safe fields
+        unsafe impl ::bytemuck::Pod for #name {}
+        unsafe impl ::bytemuck::Zeroable for #name {}
+
+        impl ::solzempic::Event for #name {
+            const DISCRIMINATOR: [u8; 8] = #disc_array;
+            const NAME: &'static str = #name_str;
+        }
+
+        impl ::solzempic::EventIdlMeta for #name {
+            const NAME: &'static str = #name_str;
+            const DISCRIMINATOR: [u8; 8] = #disc_array;
+            const FIELDS: &'static [::solzempic::EventFieldMeta] = &[
+                #(#field_metas),*
+            ];
+            const META: ::solzempic::EventMeta = ::solzempic::EventMeta {
+                name: Self::NAME,
+                discriminator: Self::DISCRIMINATOR,
+                fields: Self::FIELDS,
+            };
+        }
+
+        // Auto-register with inventory when idl feature is enabled
+        #[cfg(feature = "idl")]
+        ::solzempic::inventory::submit! {
+            &<#name as ::solzempic::EventIdlMeta>::META
+        }
+    };
+
+    TokenStream::from(expanded)
 }

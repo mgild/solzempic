@@ -333,3 +333,38 @@ impl<'a, T: ShardListNode, F: Framework> ShardListRefMut<'a, T, F> {
         *self.current.get_mut().next_shard_mut() = next_next;
     }
 }
+
+// ============================================================================
+// From Implementations
+// ============================================================================
+
+impl<'a, T: ShardListNode, F: Framework> From<(AccountRefMut<'a, T, F>, Option<AccountRefMut<'a, T, F>>)>
+    for ShardListRefMut<'a, T, F>
+{
+    /// Create a ShardListRefMut from a tuple of (current, optional next).
+    ///
+    /// # Example
+    /// ```ignore
+    /// let shards: ShardListRefMut<_> = (current, Some(next)).into();
+    /// let shards: ShardListRefMut<_> = (current, None).into();
+    /// ```
+    #[inline]
+    fn from((current, next): (AccountRefMut<'a, T, F>, Option<AccountRefMut<'a, T, F>>)) -> Self {
+        Self::from_loaded(current, next)
+    }
+}
+
+impl<'a, T: ShardListNode, F: Framework> From<(AccountRefMut<'a, T, F>, AccountRefMut<'a, T, F>)>
+    for ShardListRefMut<'a, T, F>
+{
+    /// Create a ShardListRefMut from a tuple of (current, next).
+    ///
+    /// # Example
+    /// ```ignore
+    /// let shards: ShardListRefMut<_> = (current, next).into();
+    /// ```
+    #[inline]
+    fn from((current, next): (AccountRefMut<'a, T, F>, AccountRefMut<'a, T, F>)) -> Self {
+        Self::from_loaded(current, Some(next))
+    }
+}

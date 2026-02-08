@@ -138,6 +138,7 @@
 extern crate alloc;
 
 mod account;
+pub mod event;
 pub mod programs;
 pub mod traits;
 mod wrappers;
@@ -165,7 +166,7 @@ pub use programs::{
     ClockSysvar, RentSysvar, SlotHashesSysvar, InstructionsSysvar, RecentBlockhashesSysvar,
     LastRestartSlotSysvar, LastRestartSlot,
     // Token
-    Mint, TokenAccountData, TokenAccountRefMut, Vault, SolVault,
+    Mint, TokenAccountData, TokenAccountInitBuilder, TokenAccountRefMut, Vault, SolVault,
     // Validation
     validate_token_program, validate_system_program, validate_clock_sysvar,
     validate_slot_hashes_sysvar, validate_rent_sysvar,
@@ -178,8 +179,11 @@ pub use wrappers::{
 // Re-export core traits
 pub use traits::{check_discriminator, Account, Initializable, Loadable};
 
+// Re-export event types
+pub use event::{emit_event, Event, EventFieldMeta, EventIdlMeta, EventMeta};
+
 // Re-export derive macros (Account derive renamed to avoid conflict with Account trait)
-pub use solzempic_macros::{Account as AccountDerive, SolzempicEntrypoint, account, instruction, params};
+pub use solzempic_macros::{Account as AccountDerive, SolzempicEntrypoint, account, event, instruction, params};
 
 /// Define an AccountType enum with automatic discriminator values.
 ///

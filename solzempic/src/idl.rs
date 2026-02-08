@@ -21,7 +21,7 @@
 use alloc::string::{String, ToString};
 use alloc::format;
 use alloc::vec::Vec;
-use crate::{InstructionMeta, AccountTypeMeta};
+use crate::{InstructionMeta, AccountTypeMeta, EventMeta};
 
 /// Configuration for IDL generation
 pub struct IdlConfig<'a> {
@@ -106,11 +106,12 @@ pub fn to_json(
     json
 }
 
-/// Generate JSON IDL with auto-collected account types.
+/// Generate JSON IDL with auto-collected account types and events.
 ///
 /// This function uses the `inventory` crate to automatically collect all account
-/// types registered with `#[account(discriminator = ...)]` and generates the
-/// complete IDL including the "accounts" and "types" sections.
+/// types registered with `#[account(discriminator = ...)]` and events registered
+/// with `#[event]`, then generates the complete IDL including the "accounts",
+/// "types", and "events" sections.
 ///
 /// # Example
 ///
@@ -138,19 +139,39 @@ pub fn to_json_with_accounts(
         .copied()
         .collect();
 
-    to_json_full(address, name, version, instructions, &accounts)
+    // Auto-collect events via inventory
+    let events: Vec<&EventMeta> = crate::inventory::iter::<&'static EventMeta>()
+        .copied()
+        .collect();
+
+    to_json_full_with_events(address, name, version, instructions, &accounts, &events)
 }
 
-/// Generate JSON IDL with explicit account types.
+/// Generate JSON IDL with explicit account types (no events).
 ///
 /// Use this if you want to manually specify account types rather than using
-/// automatic collection.
+/// automatic collection, and you don't need event metadata.
 pub fn to_json_full(
     address: &str,
     name: &str,
     version: &str,
     instructions: &[InstructionMeta],
     accounts: &[&AccountTypeMeta],
+) -> String {
+    to_json_full_with_events(address, name, version, instructions, accounts, &[])
+}
+
+/// Generate JSON IDL with explicit account types and events.
+///
+/// Use this if you want to manually specify account types and events rather
+/// than using automatic collection.
+pub fn to_json_full_with_events(
+    address: &str,
+    name: &str,
+    version: &str,
+    instructions: &[InstructionMeta],
+    accounts: &[&AccountTypeMeta],
+    events: &[&EventMeta],
 ) -> String {
     let mut json = String::with_capacity(128 * 1024);
 
@@ -250,6 +271,41 @@ pub fn to_json_full(
     }
     json.push_str("  ],\n");
 
+    // Events section
+    json.push_str("  \"events\": [\n");
+    for (i, event) in events.iter().enumerate() {
+        json.push_str("    {\n");
+        json.push_str(&format!("      \"name\": \"{}\",\n", event.name));
+
+        // Convert discriminator to JSON array
+        let disc_str = event.discriminator.iter()
+            .map(|b| b.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        json.push_str(&format!("      \"discriminator\": [{}],\n", disc_str));
+
+        // Fields
+        json.push_str("      \"fields\": [\n");
+        for (j, field) in event.fields.iter().enumerate() {
+            json.push_str("        {\n");
+            json.push_str(&format!("          \"name\": \"{}\",\n", to_camel_case(field.name)));
+            json.push_str(&format!("          \"type\": {}\n", rust_type_to_idl_json(field.type_name)));
+            json.push_str("        }");
+            if j < event.fields.len() - 1 {
+                json.push(',');
+            }
+            json.push('\n');
+        }
+        json.push_str("      ]\n");
+
+        json.push_str("    }");
+        if i < events.len() - 1 {
+            json.push(',');
+        }
+        json.push('\n');
+    }
+    json.push_str("  ],\n");
+
     json.push_str("  \"errors\": []\n");
     json.push_str("}\n");
 
@@ -322,6 +378,13 @@ fn rust_type_to_idl_json(rust_type: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "idl")]
+    mod event_idl_tests;
+    #[cfg(feature = "idl")]
+    mod json_generation_tests;
+    #[cfg(feature = "idl")]
+    mod type_conversion_tests;
 
     #[test]
     fn test_to_camel_case() {
