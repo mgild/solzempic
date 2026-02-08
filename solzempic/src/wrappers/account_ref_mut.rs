@@ -94,6 +94,8 @@ pub struct AccountRefMut<'a, T: Loadable, F: Framework> {
     /// The underlying AccountView reference.
     pub info: &'a AccountView,
     data: &'a mut [u8],
+    /// PDA bump seed (populated when created via init_pda)
+    pda_bump: Option<u8>,
     _marker: PhantomData<(T, F)>,
 }
 
@@ -201,6 +203,7 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
         Ok(Self {
             info,
             data,
+            pda_bump: None,
             _marker: PhantomData,
         })
     }
@@ -211,6 +214,15 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
     #[inline]
     pub fn address(&self) -> &Address {
         self.info.address()
+    }
+
+    /// Get the PDA bump seed if this account was created via `init_pda`.
+    ///
+    /// Returns `Some(bump)` for accounts created with PDA initialization,
+    /// `None` for accounts loaded with `load()` or `load_unchecked()`.
+    #[inline]
+    pub fn pda_bump(&self) -> Option<u8> {
+        self.pda_bump
     }
 
     /// Get a reference to the parsed account data.
@@ -518,6 +530,12 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
             return Err(crate::errors::account_not_writable());
         }
 
+        // Extract bump from seeds (last byte of last seed)
+        let pda_bump = seeds
+            .last()
+            .and_then(|last_seed| last_seed.last())
+            .copied();
+
         // Create account via CPI (seeds should include bump)
         // Note: system_program param kept for API compatibility but not used
         let _ = system_program;
@@ -526,7 +544,10 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
         // Initialize: write discriminator byte
         let data = unsafe { info.borrow_unchecked_mut() };
         data[0] = T::DISCRIMINATOR;
-        Self::load_unchecked(info)
+
+        let mut account = Self::load_unchecked(info)?;
+        account.pda_bump = pda_bump;
+        Ok(account)
     }
 }
 
@@ -659,6 +680,48 @@ impl<'a> PdaInitBuilder<'a> {
             self.system_program,
             seeds.as_ref(),
             P::AccountType::LEN,
+        )
+    }
+
+    /// Create a PDA account without initializing (for custom initialization logic).
+    ///
+    /// This method creates the account and allocates space, but does not initialize
+    /// the discriminator or data. Use this when the account needs custom initialization
+    /// logic that can't be expressed with the `Initializable` trait.
+    ///
+    /// # Arguments
+    /// * `account` - The uninitialized PDA account
+    /// * `pda` - The typed PDA object providing seeds
+    /// * `program_id` - The program ID that will own the account
+    /// * `space` - The space to allocate for the account
+    ///
+    /// # Example
+    /// ```ignore
+    /// let pda = ActiveClmmPositions::find_pda(market, 0, &PROGRAM_ID);
+    /// pda_builder.create(&accounts[10], &pda, &PROGRAM_ID, ActiveClmmPositions::account_size(100))?;
+    /// // Now manually initialize the account data...
+    /// ```
+    #[inline]
+    pub fn create<P>(
+        &self,
+        account: &'a pinocchio::AccountView,
+        pda: &P,
+        program_id: &solana_address::Address,
+        space: usize,
+    ) -> Result<(), pinocchio::error::ProgramError>
+    where
+        P: crate::traits::Pda,
+        for<'b> P::Seeds<'b>: AsRef<[&'b [u8]]>,
+    {
+        let seeds = pda.seeds();
+        let seeds_slice = seeds.as_ref();
+
+        crate::create_pda_account(
+            self.payer,
+            account,
+            program_id,
+            space,
+            seeds_slice,
         )
     }
 }
