@@ -336,6 +336,15 @@ impl<'a> HasAccountView for ReadOnly<'a> {
     }
 }
 
+impl<'a> TryFrom<&'a AccountView> for ReadOnly<'a> {
+    type Error = ProgramError;
+
+    #[inline]
+    fn try_from(info: &'a AccountView) -> Result<Self, Self::Error> {
+        Self::wrap(info)
+    }
+}
+
 impl<'a> ReadOnly<'a> {
     /// Returns the account's public key.
     #[inline]
