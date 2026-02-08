@@ -58,6 +58,13 @@ impl HasAddress for AccountView {
     }
 }
 
+impl HasAddress for Address {
+    #[inline]
+    fn address(&self) -> &Address {
+        self
+    }
+}
+
 
 impl HasAccountView for AccountView {
     #[inline]
