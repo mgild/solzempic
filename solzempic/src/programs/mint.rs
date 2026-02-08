@@ -113,6 +113,15 @@ impl<'a> HasAccountView for Mint<'a> {
     }
 }
 
+impl<'a> TryFrom<&'a AccountView> for Mint<'a> {
+    type Error = ProgramError;
+
+    #[inline]
+    fn try_from(info: &'a AccountView) -> Result<Self, Self::Error> {
+        Self::wrap(info)
+    }
+}
+
 impl<'a> Mint<'a> {
     // SPL Token Mint layout (82 bytes):
     // 0-4:   mint_authority COption discriminant

@@ -80,3 +80,12 @@ impl<'a> HasAccountView for SystemProgram<'a> {
         self.info
     }
 }
+
+impl<'a> TryFrom<&'a AccountView> for SystemProgram<'a> {
+    type Error = ProgramError;
+
+    #[inline]
+    fn try_from(info: &'a AccountView) -> Result<Self, Self::Error> {
+        Self::wrap(info)
+    }
+}

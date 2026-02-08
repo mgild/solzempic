@@ -125,3 +125,12 @@ impl<'a> HasAccountView for Lut<'a> {
         self.info
     }
 }
+
+impl<'a> TryFrom<&'a AccountView> for Lut<'a> {
+    type Error = ProgramError;
+
+    #[inline]
+    fn try_from(info: &'a AccountView) -> Result<Self, Self::Error> {
+        Self::wrap(info)
+    }
+}

@@ -91,6 +91,15 @@ impl<'a> HasAccountView for TokenProgram<'a> {
     }
 }
 
+impl<'a> TryFrom<&'a AccountView> for TokenProgram<'a> {
+    type Error = ProgramError;
+
+    #[inline]
+    fn try_from(info: &'a AccountView) -> Result<Self, Self::Error> {
+        Self::wrap(info)
+    }
+}
+
 impl<'a> TokenProgram<'a> {
     /// Check if this is the Token-2022 program.
     ///

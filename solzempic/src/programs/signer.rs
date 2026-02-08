@@ -100,6 +100,15 @@ impl<'a> HasAccountView for Signer<'a> {
     }
 }
 
+impl<'a> TryFrom<&'a AccountView> for Signer<'a> {
+    type Error = ProgramError;
+
+    #[inline]
+    fn try_from(info: &'a AccountView) -> Result<Self, Self::Error> {
+        Self::wrap(info)
+    }
+}
+
 impl<'a> Signer<'a> {
     /// Returns the account's public key.
     #[inline]
@@ -193,6 +202,15 @@ impl<'a> HasAccountView for MutSigner<'a> {
     }
 }
 
+impl<'a> TryFrom<&'a AccountView> for MutSigner<'a> {
+    type Error = ProgramError;
+
+    #[inline]
+    fn try_from(info: &'a AccountView) -> Result<Self, Self::Error> {
+        Self::wrap(info)
+    }
+}
+
 impl<'a> MutSigner<'a> {
     /// Returns the account's public key.
     #[inline]
@@ -251,6 +269,15 @@ impl<'a> HasAccountView for Writable<'a> {
     #[inline]
     fn account_view(&self) -> &AccountView {
         self.info
+    }
+}
+
+impl<'a> TryFrom<&'a AccountView> for Writable<'a> {
+    type Error = ProgramError;
+
+    #[inline]
+    fn try_from(info: &'a AccountView) -> Result<Self, Self::Error> {
+        Self::wrap(info)
     }
 }
 
