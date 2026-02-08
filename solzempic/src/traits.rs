@@ -167,3 +167,87 @@ pub trait Initializable: Loadable {}
 pub fn check_discriminator(data: &[u8], expected: u8) -> bool {
     !data.is_empty() && data[0] == expected
 }
+
+// ============================================================================
+// PDA Traits
+// ============================================================================
+
+/// Trait for PDA (Program Derived Address) types.
+///
+/// Each PDA type stores its derivation seeds and can provide them
+/// for account creation via `init_pda`.
+///
+/// The associated type `AccountType` carries account type information
+/// for type-safe PDA initialization (use `()` if not needed).
+pub trait Pda {
+    /// The account type this PDA is for (use `()` if not type-specific)
+    type AccountType;
+
+    /// The seeds array type (e.g., `[&[u8]; 4]`)
+    type Seeds<'a>: AsRef<[&'a [u8]]>
+    where
+        Self: 'a;
+
+    /// Get the seeds for this PDA, including the bump seed.
+    fn seeds(&self) -> Self::Seeds<'_>;
+
+    /// Get the bump seed as a single byte.
+    fn bump(&self) -> u8;
+}
+
+/// Trait for PDA seed data types.
+///
+/// Implementors define how to build the seeds array from their fields
+/// plus the bump seed. Used with `PdaBase<S>` for generic PDA construction.
+pub trait PdaSeeds {
+    type Seeds<'a>: AsRef<[&'a [u8]]>
+    where
+        Self: 'a;
+
+    fn seeds<'a>(&'a self, bump: &'a [u8; 1]) -> Self::Seeds<'a>;
+}
+
+/// Generic PDA struct storing address, bump, and seed data.
+///
+/// Provides a blanket `Pda` impl for any `S: PdaSeeds`, eliminating
+/// per-type boilerplate for `seeds()` and `bump()`.
+///
+/// The optional type parameter `T` can be used to carry account type information
+/// for type-safe PDA initialization.
+pub struct PdaBase<S, T = ()> {
+    pub address: solana_address::Address,
+    bump: [u8; 1],
+    inner: S,
+    _phantom: core::marker::PhantomData<T>,
+}
+
+impl<S, T> PdaBase<S, T> {
+    #[inline]
+    pub fn new(address: solana_address::Address, bump: u8, inner: S) -> Self {
+        Self {
+            address,
+            bump: [bump],
+            inner,
+            _phantom: core::marker::PhantomData,
+        }
+    }
+}
+
+impl<S: PdaSeeds, T> Pda for PdaBase<S, T> {
+    type AccountType = T;
+
+    type Seeds<'a>
+        = S::Seeds<'a>
+    where
+        Self: 'a;
+
+    #[inline]
+    fn seeds(&self) -> Self::Seeds<'_> {
+        self.inner.seeds(&self.bump)
+    }
+
+    #[inline]
+    fn bump(&self) -> u8 {
+        self.bump[0]
+    }
+}

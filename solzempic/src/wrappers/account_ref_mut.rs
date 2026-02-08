@@ -552,3 +552,113 @@ impl<'a, T: Loadable, F: Framework> AsAccountRef<'a, T, F> for AccountRefMut<'a,
         (self.info.address().as_ref() == expected.as_ref(), bump)
     }
 }
+
+// ============================================================================
+// PDA Init Builder
+// ============================================================================
+
+/// Builder for PDA initialization to reduce parameter repetition.
+///
+/// Captures common parameters (payer, system_program) and provides methods
+/// for initializing PDAs with different seeds and sizes.
+///
+/// # Example
+/// ```ignore
+/// let pda_builder = PdaInitBuilder::new(payer, system_program);
+///
+/// let market_pda = Market::find_pda(mint_a, mint_b, &seed, &PROGRAM_ID);
+/// let market = pda_builder.init_pda::<Market>(&accounts[5], &market_pda)?;
+///
+/// let vault_pda = Vault::find_pda(market, idx, &PROGRAM_ID);
+/// let vault = pda_builder.init_pda::<Vault>(&accounts[6], &vault_pda)?;
+/// ```
+pub struct PdaInitBuilder<'a> {
+    payer: &'a pinocchio::AccountView,
+    system_program: &'a pinocchio::AccountView,
+}
+
+impl<'a> PdaInitBuilder<'a> {
+    /// Create a new PDA init builder with shared parameters.
+    #[inline]
+    pub fn new(
+        payer: &'a pinocchio::AccountView,
+        system_program: &'a pinocchio::AccountView,
+    ) -> Self {
+        Self { payer, system_program }
+    }
+
+    /// Initialize a PDA account with the given seeds and size.
+    ///
+    /// # Type Parameters
+    /// * `T` - The account type to initialize (must implement Initializable)
+    /// * `F` - The framework type (defaults to current framework)
+    ///
+    /// # Arguments
+    /// * `account` - The uninitialized PDA account
+    /// * `seeds` - The PDA seeds (including bump)
+    ///
+    /// # Example
+    /// ```ignore
+    /// let pda = Market::find_pda(mint_a, mint_b, &seed, &PROGRAM_ID);
+    /// let market = pda_builder.init_pda::<Market>(&accounts[5], &pda.seeds())?;
+    /// ```
+    #[inline]
+    pub fn init_pda<T, F>(
+        &self,
+        account: &'a pinocchio::AccountView,
+        seeds: &[&[u8]],
+    ) -> Result<AccountRefMut<'a, T, F>, pinocchio::error::ProgramError>
+    where
+        T: crate::traits::Initializable,
+        F: crate::Framework,
+    {
+        AccountRefMut::init_pda(
+            account,
+            self.payer,
+            self.system_program,
+            seeds,
+            T::LEN,
+        )
+    }
+
+    /// Initialize a PDA account from a typed PDA object.
+    ///
+    /// The account type is inferred from the PDA object's `AccountType` associated type,
+    /// eliminating the need for explicit type annotations.
+    ///
+    /// # Type Parameters
+    /// * `P` - The PDA type (must implement Pda with AccountType)
+    /// * `F` - The framework type (inferred from context)
+    ///
+    /// # Arguments
+    /// * `account` - The uninitialized PDA account
+    /// * `pda` - The typed PDA object
+    ///
+    /// # Example
+    /// ```ignore
+    /// let pda = Market::find_pda(mint_a, mint_b, &seed, &PROGRAM_ID);
+    /// let mut market = pda_builder.init(&accounts[5], &pda)?;
+    /// // Type is inferred from pda's AccountType!
+    /// ```
+    #[inline]
+    pub fn init<P, F>(
+        &self,
+        account: &'a pinocchio::AccountView,
+        pda: &P,
+    ) -> Result<AccountRefMut<'a, P::AccountType, F>, pinocchio::error::ProgramError>
+    where
+        P: crate::traits::Pda,
+        P::AccountType: crate::traits::Initializable,
+        F: crate::Framework,
+        for<'b> P::Seeds<'b>: AsRef<[&'b [u8]]>,
+    {
+        let seeds = pda.seeds();
+        AccountRefMut::init_pda(
+            account,
+            self.payer,
+            self.system_program,
+            seeds.as_ref(),
+            P::AccountType::LEN,
+        )
+    }
+}

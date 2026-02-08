@@ -172,12 +172,12 @@ pub use programs::{
     validate_slot_hashes_sysvar, validate_rent_sysvar,
 };
 pub use wrappers::{
-    AccountRef, AccountRefMut, AsAccountRef, ShardRefContext, ShardRefMutContext,
+    AccountRef, AccountRefMut, AsAccountRef, PdaInitBuilder, ShardRefContext, ShardRefMutContext,
     ShardListNode, ShardListRef, ShardListRefMut,
 };
 
 // Re-export core traits
-pub use traits::{check_discriminator, Account, Initializable, Loadable};
+pub use traits::{check_discriminator, Account, Initializable, Loadable, Pda, PdaBase, PdaSeeds};
 
 // Re-export event types
 pub use event::{emit_event, Event, EventFieldMeta, EventIdlMeta, EventMeta};

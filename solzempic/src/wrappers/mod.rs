@@ -75,7 +75,7 @@ mod shard_ref_mut_context;
 mod traits;
 
 pub use account_ref::AccountRef;
-pub use account_ref_mut::AccountRefMut;
+pub use account_ref_mut::{AccountRefMut, PdaInitBuilder};
 pub use shard_list_ref::{ShardListNode, ShardListRef};
 pub use shard_list_ref_mut::ShardListRefMut;
 pub use shard_ref_context::ShardRefContext;
