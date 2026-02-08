@@ -286,6 +286,39 @@ impl<'a> Lut<'a> {
             &[signer],
         )
     }
+
+    /// Create and extend a Lookup Table in a single call.
+    ///
+    /// # Arguments
+    /// * `pda_builder` - PDA builder containing payer and system_program
+    /// * `authority` - The authority account (will be the LUT owner)
+    /// * `recent_slot` - Recent slot for PDA derivation
+    /// * `addresses` - Slice of addresses to add to the LUT after creation
+    /// * `signer_seeds` - Optional seeds if authority is a PDA
+    ///
+    /// # Example
+    /// ```ignore
+    /// let lut = Lut::wrap(&accounts[0])?;
+    /// lut.init_with(
+    ///     &pda_builder,
+    ///     market.info,
+    ///     lut_slot,
+    ///     &lut_addresses,
+    ///     Some(&signer_seeds),
+    /// )?;
+    /// ```
+    #[inline]
+    pub fn init_with<'b>(
+        &self,
+        pda_builder: &crate::PdaInitBuilder<'b>,
+        authority: &'b AccountView,
+        recent_slot: u64,
+        addresses: &[&Address],
+        signer_seeds: &[pinocchio::cpi::Seed<'b>],
+    ) -> Result<(), ProgramError> {
+        self.create(pda_builder, authority, recent_slot, signer_seeds)?;
+        self.extend(pda_builder, authority, addresses, signer_seeds)
+    }
 }
 
 impl<'a> HasAccountView for Lut<'a> {
