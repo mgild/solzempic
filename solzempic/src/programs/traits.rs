@@ -44,6 +44,42 @@ impl<T: HasAccountView> HasAccountView for &T {
     }
 }
 
+/// Extension trait for AccountView slices to enable ergonomic validation.
+///
+/// Provides the `validated()` method for converting accounts without explicit types or references.
+///
+/// # Example
+///
+/// ```ignore
+/// use solzempic::AccountSliceExt;
+///
+/// let system_program = accounts.validated(0)?;  // Type inferred from usage
+/// let payer = accounts.validated(1)?;
+/// ```
+pub trait AccountSliceExt {
+    /// Get a validated account at the given index.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ProgramError::NotEnoughAccountKeys` if index is out of bounds,
+    /// or the validation error from the specific account type.
+    fn validated<'a, T>(&'a self, index: usize) -> Result<T, ProgramError>
+    where
+        T: ValidatedAccount<'a> + TryFrom<&'a AccountView, Error = ProgramError>;
+}
+
+impl AccountSliceExt for [AccountView] {
+    #[inline]
+    fn validated<'a, T>(&'a self, index: usize) -> Result<T, ProgramError>
+    where
+        T: ValidatedAccount<'a> + TryFrom<&'a AccountView, Error = ProgramError>,
+    {
+        self.get(index)
+            .ok_or(ProgramError::NotEnoughAccountKeys)?
+            .try_into()
+    }
+}
+
 
 /// Trait for validated program and sysvar account wrappers.
 ///

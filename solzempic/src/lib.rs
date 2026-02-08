@@ -155,7 +155,7 @@ pub use programs::{
     ADDRESS_LOOKUP_TABLE_PROGRAM_ID, CLOCK_SYSVAR_ID, RENT_SYSVAR_ID, SLOT_HASHES_SYSVAR_ID,
     INSTRUCTIONS_SYSVAR_ID, RECENT_BLOCKHASHES_SYSVAR_ID, LAST_RESTART_SLOT_SYSVAR_ID,
     // Traits
-    ValidatedAccount, HasAccountView,
+    ValidatedAccount, HasAccountView, AccountSliceExt,
     // Program wrappers
     SystemProgram, TokenProgram, AtaProgram, AltProgram, Lut,
     // Signer/Payer/MutSigner
