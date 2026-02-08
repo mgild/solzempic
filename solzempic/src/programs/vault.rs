@@ -161,7 +161,7 @@ impl<'a> SolVault<'a> {
     /// owned by the System program.
     #[inline]
     pub fn wrap(info: &'a AccountView) -> Result<Self, ProgramError> {
-        if !address_eq(unsafe { info.owner() }, &SYSTEM_PROGRAM_ID) {
+        if !info.owned_by(&SYSTEM_PROGRAM_ID) {
             return Err(ProgramError::IllegalOwner);
         }
         Ok(Self { info })
@@ -200,5 +200,26 @@ impl<'a> HasAccountView for SolVault<'a> {
     #[inline]
     fn account_view(&self) -> &AccountView {
         self.info
+    }
+}
+
+impl<'a> super::traits::ValidatedAccount<'a> for SolVault<'a> {
+    #[inline]
+    fn wrap(info: &'a AccountView) -> Result<Self, ProgramError> {
+        Self::wrap(info)
+    }
+
+    #[inline]
+    fn info(&self) -> &'a AccountView {
+        self.info
+    }
+}
+
+impl<'a> TryFrom<&'a AccountView> for SolVault<'a> {
+    type Error = ProgramError;
+
+    #[inline]
+    fn try_from(info: &'a AccountView) -> Result<Self, Self::Error> {
+        Self::wrap(info)
     }
 }

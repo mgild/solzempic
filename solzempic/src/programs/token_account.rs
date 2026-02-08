@@ -449,6 +449,8 @@ pub struct TokenAccountInitBuilder<'a> {
     payer: Option<&'a AccountView>,
     owner: Option<&'a AccountView>,
     system_program: &'a AccountView,
+    token_program: Option<&'a AccountView>,
+    token_2022_program: Option<&'a AccountView>,
 }
 
 impl<'a> TokenAccountInitBuilder<'a> {
@@ -460,6 +462,8 @@ impl<'a> TokenAccountInitBuilder<'a> {
             payer: None,
             owner: None,
             system_program,
+            token_program: None,
+            token_2022_program: None,
         }
     }
 
@@ -475,6 +479,8 @@ impl<'a> TokenAccountInitBuilder<'a> {
             payer: Some(payer),
             owner: Some(owner),
             system_program,
+            token_program: None,
+            token_2022_program: None,
         }
     }
 
@@ -492,6 +498,21 @@ impl<'a> TokenAccountInitBuilder<'a> {
     pub fn with_owner(self, owner: &'a AccountView) -> Self {
         Self {
             owner: Some(owner),
+            ..self
+        }
+    }
+
+    /// Set the token programs (SPL Token and Token-2022).
+    /// Returns a new builder with token programs set.
+    #[inline]
+    pub fn with_token_programs(
+        self,
+        token_program: &'a AccountView,
+        token_2022_program: &'a AccountView,
+    ) -> Self {
+        Self {
+            token_program: Some(token_program),
+            token_2022_program: Some(token_2022_program),
             ..self
         }
     }
@@ -518,15 +539,28 @@ impl<'a> TokenAccountInitBuilder<'a> {
     /// Initialize an ATA idempotently using `TokenAccountRefMut::init_ata()`.
     /// Requires both payer and owner to be set via fluent methods.
     /// Returns a loaded `TokenAccountRefMut` wrapper for the initialized account.
+    ///
+    /// The token program is automatically determined from the mint's owner
+    /// if token programs were set via `with_token_programs()`.
     #[inline]
     pub fn init_ata(
         &self,
         ata: &'a AccountView,
         mint: impl HasAccountView,
-        token_program: impl HasAccountView,
     ) -> Result<TokenAccountRefMut<'a>, ProgramError> {
         let payer = self.payer.ok_or(ProgramError::NotEnoughAccountKeys)?;
         let owner = self.owner.ok_or(ProgramError::NotEnoughAccountKeys)?;
+
+        // Determine token program from mint's owner
+        let mint_view = mint.account_view();
+        let token_program = if mint_view.owned_by(&TOKEN_2022_PROGRAM_ID) {
+            self.token_2022_program.ok_or(ProgramError::NotEnoughAccountKeys)?
+        } else if mint_view.owned_by(&TOKEN_PROGRAM_ID) {
+            self.token_program.ok_or(ProgramError::NotEnoughAccountKeys)?
+        } else {
+            return Err(ProgramError::IllegalOwner);
+        };
+
         TokenAccountRefMut::init_ata(
             ata,
             payer,
