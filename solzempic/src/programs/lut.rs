@@ -303,3 +303,15 @@ impl<'a> TryFrom<&'a AccountView> for Lut<'a> {
         Self::wrap(info)
     }
 }
+
+impl<'a> super::traits::ValidatedAccount<'a> for Lut<'a> {
+    #[inline]
+    fn wrap(info: &'a AccountView) -> Result<Self, ProgramError> {
+        Self::wrap(info)
+    }
+
+    #[inline]
+    fn info(&self) -> &'a AccountView {
+        self.info
+    }
+}
