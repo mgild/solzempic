@@ -258,6 +258,39 @@ impl<'a> TokenAccountRefMut<'a> {
         self.data = unsafe { self.info.borrow_unchecked_mut() };
     }
 
+    /// Send tokens from this account to another token account.
+    ///
+    /// This is a convenience method that calls the token transfer CPI.
+    /// The token program is automatically derived from the source account's owner.
+    ///
+    /// # Arguments
+    ///
+    /// * `to` - Destination token account
+    /// * `authority` - Account authorized to transfer tokens (owner or delegate)
+    /// * `amount` - Amount of tokens to transfer
+    /// * `signer_seeds` - PDA seeds if authority is a PDA, or `&[]` if regular signer
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Transfer from user to vault
+    /// self.user_token.send(&self.vault, self.owner.info(), amount, &[])?;
+    ///
+    /// // Transfer from vault (PDA) to user
+    /// let seeds: [Seed; 3] = [b"vault", market_id.as_ref(), &[bump]].map(Seed::from);
+    /// self.vault.send(&self.user_token, self.market.info, amount, &seeds)?;
+    /// ```
+    #[inline]
+    pub fn send(
+        &self,
+        to: impl crate::AsAccountView,
+        authority: impl crate::AsAccountView,
+        amount: u64,
+        signer_seeds: &[super::token_cpi::Seed<'a>],
+    ) -> Result<(), ProgramError> {
+        super::token_cpi::transfer(self, to, authority, amount, signer_seeds)
+    }
+
     /// Create or initialize an Associated Token Account idempotently.
     ///
     /// This method provides an optimized ATA creation flow:
@@ -425,6 +458,20 @@ impl<'a> TokenAccountRefMut<'a> {
 impl<'a> HasAccountView for TokenAccountRefMut<'a> {
     #[inline]
     fn account_view(&self) -> &AccountView {
+        self.info
+    }
+}
+
+impl<'a> crate::AsAccountView for TokenAccountRefMut<'a> {
+    #[inline]
+    fn as_account_view(&self) -> &AccountView {
+        self.info
+    }
+}
+
+impl<'a> crate::AsAccountView for &TokenAccountRefMut<'a> {
+    #[inline]
+    fn as_account_view(&self) -> &AccountView {
         self.info
     }
 }

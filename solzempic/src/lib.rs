@@ -167,6 +167,8 @@ pub use programs::{
     LastRestartSlotSysvar, LastRestartSlot,
     // Token
     Mint, TokenAccountData, TokenAccountInitBuilder, TokenAccountRefMut, Vault, SolVault,
+    // Token CPI
+    token_cpi,
     // Validation
     validate_token_program, validate_system_program, validate_clock_sysvar,
     validate_slot_hashes_sysvar, validate_rent_sysvar,
@@ -269,6 +271,31 @@ pub use solana_address::address_eq;
 
 // Re-export shank for IDL generation (used by #[SolzempicEntrypoint] macro)
 pub use shank;
+
+/// Local trait for converting types to &AccountView reference.
+///
+/// This trait works around Rust's orphan rule by being defined in this crate,
+/// allowing us to implement it for both local types (TokenAccountRefMut, TokenAccountRef)
+/// and foreign types (AccountView).
+pub trait AsAccountView {
+    fn as_account_view(&self) -> &AccountView;
+}
+
+// Implement for AccountView (identity conversion)
+impl AsAccountView for AccountView {
+    #[inline]
+    fn as_account_view(&self) -> &AccountView {
+        self
+    }
+}
+
+// Implement for &AccountView (reference to AccountView)
+impl AsAccountView for &AccountView {
+    #[inline]
+    fn as_account_view(&self) -> &AccountView {
+        self
+    }
+}
 
 /// The Instruction trait defines the three-phase instruction processing pattern.
 ///

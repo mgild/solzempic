@@ -27,6 +27,7 @@ mod signer;
 mod system;
 mod sysvars;
 mod token_account;
+pub mod token_cpi;
 mod token_program;
 mod traits;
 mod validation;
