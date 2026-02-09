@@ -177,7 +177,7 @@ pub use wrappers::{
 };
 
 // Re-export core traits
-pub use traits::{check_discriminator, Account, Initializable, Loadable, Pda, PdaBase, PdaSeeds};
+pub use traits::{check_discriminator, Account, FromTuplePda, Initializable, Loadable, Pda, PdaBase, PdaSeeds};
 
 // Re-export event types
 pub use event::{emit_event, Event, EventFieldMeta, EventIdlMeta, EventMeta};

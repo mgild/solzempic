@@ -706,6 +706,60 @@ impl<'a> PdaInitBuilder<'a> {
         )
     }
 
+    /// Initialize a PDA account from a value that converts to a PDA.
+    ///
+    /// This accepts anything that implements `Into<P>`, allowing you to pass
+    /// tuples or other types that convert to PDAs without explicit construction.
+    ///
+    /// # Example
+    /// ```ignore
+    /// // Pass a tuple that converts to ActiveClmmPda then to ActiveClmmPositionsPda
+    /// let active_clmm: AccountRefMut<ActiveClmmPositionsHeader> =
+    ///     pda_builder.init_into(&accounts[10], (market_key, 0).into())?;
+    /// ```
+    #[inline]
+    pub fn init_into<P, F, I>(
+        &self,
+        account: &'a pinocchio::AccountView,
+        pda: I,
+    ) -> Result<AccountRefMut<'a, P::AccountType, F>, pinocchio::error::ProgramError>
+    where
+        I: Into<P>,
+        P: crate::traits::Pda,
+        P::AccountType: crate::traits::Initializable,
+        F: crate::Framework,
+        for<'b> P::Seeds<'b>: AsRef<[pinocchio::cpi::Seed<'b>]>,
+    {
+        let pda = pda.into();
+        self.init(account, &pda)
+    }
+
+    /// Initialize a PDA account from a tuple, inferring the PDA type from the return type.
+    ///
+    /// This is a convenience method for accounts that implement a tuple-to-PDA conversion.
+    /// The account type is inferred from the return type annotation.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let active_clmm: AccountRefMut<ActiveClmmPositionsHeader> =
+    ///     pda_builder.init_tuple(&accounts[10], (market_key, 0))?;
+    /// ```
+    #[inline]
+    pub fn init_tuple<T, F, P>(
+        &self,
+        account: &'a pinocchio::AccountView,
+        tuple: (pinocchio::Address, u64),
+    ) -> Result<AccountRefMut<'a, T, F>, pinocchio::error::ProgramError>
+    where
+        T: crate::traits::Initializable + crate::traits::FromTuplePda<Pda = P>,
+        P: crate::traits::Pda<AccountType = T>,
+        F: crate::Framework,
+        for<'b> P::Seeds<'b>: AsRef<[pinocchio::cpi::Seed<'b>]>,
+    {
+        let pda = T::from_tuple(tuple);
+        self.init(account, &pda)
+    }
+
     /// Create a PDA account without initializing (for custom initialization logic).
     ///
     /// This method creates the account and allocates space, but does not initialize

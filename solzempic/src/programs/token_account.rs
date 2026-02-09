@@ -484,6 +484,18 @@ impl<'a> TokenAccountInitBuilder<'a> {
         }
     }
 
+    /// Create a new builder from a PdaInitBuilder, inheriting its payer and system_program.
+    #[inline]
+    pub fn from_pda_builder(pda_builder: &crate::PdaInitBuilder<'a>) -> Self {
+        Self {
+            payer: Some(pda_builder.payer()),
+            owner: None,
+            system_program: pda_builder.system_program(),
+            token_program: None,
+            token_2022_program: None,
+        }
+    }
+
     /// Set the payer account. Returns a new builder with payer set.
     #[inline]
     pub fn with_payer<T: crate::HasAccountView>(self, payer: &'a T) -> Self {

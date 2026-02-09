@@ -251,3 +251,15 @@ impl<S: PdaSeeds, T> Pda for PdaBase<S, T> {
         self.bump[0]
     }
 }
+
+/// Trait for account types that can construct a PDA from a tuple.
+///
+/// This enables type-driven PDA construction where the account type
+/// determines how to convert a tuple into the appropriate PDA.
+pub trait FromTuplePda {
+    /// The PDA type that can be constructed from a tuple.
+    type Pda;
+
+    /// Construct a PDA from a tuple (Address, u64).
+    fn from_tuple(tuple: (pinocchio::Address, u64)) -> Self::Pda;
+}
