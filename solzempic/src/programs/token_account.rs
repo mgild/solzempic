@@ -457,11 +457,11 @@ impl<'a> TokenAccountInitBuilder<'a> {
     /// Create a new builder with just the system_program.
     /// Chain with `.with_payer()` and `.with_owner()` to set other parameters.
     #[inline]
-    pub fn new(system_program: &'a AccountView) -> Self {
+    pub fn new<T: crate::HasAccountView>(system_program: &'a T) -> Self {
         Self {
             payer: None,
             owner: None,
-            system_program,
+            system_program: system_program.account_view(),
             token_program: None,
             token_2022_program: None,
         }
@@ -486,9 +486,9 @@ impl<'a> TokenAccountInitBuilder<'a> {
 
     /// Set the payer account. Returns a new builder with payer set.
     #[inline]
-    pub fn with_payer(self, payer: &'a AccountView) -> Self {
+    pub fn with_payer<T: crate::HasAccountView>(self, payer: &'a T) -> Self {
         Self {
-            payer: Some(payer),
+            payer: Some(payer.account_view()),
             ..self
         }
     }

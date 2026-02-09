@@ -68,6 +68,7 @@ use super::traits::{HasAccountView, ValidatedAccount};
 /// # See Also
 ///
 /// - [`Payer`] - Type alias for signers that pay for transactions
+#[derive(Copy, Clone)]
 pub struct Signer<'a> {
     info: &'a AccountView,
 }

@@ -609,11 +609,14 @@ pub struct PdaInitBuilder<'a> {
 impl<'a> PdaInitBuilder<'a> {
     /// Create a new PDA init builder with shared parameters.
     #[inline]
-    pub fn new(
-        payer: &'a pinocchio::AccountView,
-        system_program: &'a pinocchio::AccountView,
+    pub fn new<T: crate::HasAccountView, U: crate::HasAccountView>(
+        payer: &'a T,
+        system_program: &'a U,
     ) -> Self {
-        Self { payer, system_program }
+        Self {
+            payer: payer.account_view(),
+            system_program: system_program.account_view(),
+        }
     }
 
     /// Get the payer account.

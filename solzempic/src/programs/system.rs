@@ -49,6 +49,7 @@ use super::traits::{HasAccountView, ValidatedAccount};
 /// # Performance
 ///
 /// Validation cost: ~20 CUs (single 32-byte key comparison)
+#[derive(Copy, Clone)]
 pub struct SystemProgram<'a> {
     info: &'a AccountView,
 }
