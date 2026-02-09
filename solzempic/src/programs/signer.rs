@@ -101,6 +101,20 @@ impl<'a> HasAccountView for Signer<'a> {
     }
 }
 
+impl<'a> crate::AsAccountView for Signer<'a> {
+    #[inline]
+    fn as_account_view(&self) -> &AccountView {
+        self.info
+    }
+}
+
+impl<'a> crate::AsAccountView for &Signer<'a> {
+    #[inline]
+    fn as_account_view(&self) -> &AccountView {
+        self.info
+    }
+}
+
 impl<'a> TryFrom<&'a AccountView> for Signer<'a> {
     type Error = ProgramError;
 
