@@ -681,7 +681,7 @@ impl<'a> PdaInitBuilder<'a> {
     /// # Example
     /// ```ignore
     /// let pda = Market::find_pda(mint_a, mint_b, &seed, &PROGRAM_ID);
-    /// let mut market = pda_builder.init(&accounts[5], &pda)?;
+    /// let mut market = pda_builder.init(&accounts[5], pda)?;
     /// // Type is inferred from pda's AccountType!
     /// ```
     #[inline]
