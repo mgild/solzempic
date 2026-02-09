@@ -122,6 +122,27 @@ pub const ADDRESS_LOOKUP_TABLE_PROGRAM_ID: Address =
     Address::new_from_array(pinocchio_pubkey::pubkey!("AddressLookupTab1e1111111111111111111111111"));
 
 // ============================================================================
+// Token Mints
+// ============================================================================
+
+/// The Native SOL Mint (wrapped SOL).
+///
+/// This is the mint address for wrapped SOL (wSOL) tokens. Wrapped SOL
+/// allows native SOL to be used with SPL Token program interfaces:
+/// - Create a token account for SOL
+/// - Transfer SOL using token program instructions
+/// - Use SOL in programs that expect SPL tokens
+///
+/// To wrap SOL:
+/// 1. Create a token account with this mint
+/// 2. Transfer lamports to the account
+/// 3. Call `syncNative` to register the wrapped amount
+///
+/// Address: `So11111111111111111111111111111111111111112`
+pub const NATIVE_MINT: Address =
+    Address::new_from_array(pinocchio_pubkey::pubkey!("So11111111111111111111111111111111111111112"));
+
+// ============================================================================
 // Sysvar IDs
 // ============================================================================
 
