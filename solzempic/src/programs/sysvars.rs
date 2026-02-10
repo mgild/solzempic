@@ -89,6 +89,30 @@ impl<'a> ClockSysvar<'a> {
     pub fn get(&self) -> Result<pinocchio::account::Ref<'a, pinocchio::sysvars::clock::Clock>, ProgramError> {
         pinocchio::sysvars::clock::Clock::from_account_view(self.info)
     }
+
+    /// Get the current slot number.
+    ///
+    /// Convenience method that directly returns the slot without allocating a Clock struct.
+    #[inline]
+    pub fn slot(&self) -> Result<u64, ProgramError> {
+        Ok(self.get()?.slot)
+    }
+
+    /// Get the current Unix timestamp.
+    ///
+    /// Convenience method that directly returns the timestamp without allocating a Clock struct.
+    #[inline]
+    pub fn timestamp(&self) -> Result<i64, ProgramError> {
+        Ok(self.get()?.unix_timestamp)
+    }
+
+    /// Get the current epoch number.
+    ///
+    /// Convenience method that directly returns the epoch without allocating a Clock struct.
+    #[inline]
+    pub fn epoch(&self) -> Result<u64, ProgramError> {
+        Ok(self.get()?.epoch)
+    }
 }
 
 define_sysvar!(
