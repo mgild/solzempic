@@ -6,7 +6,12 @@ use alloc::vec;
 
 #[test]
 fn test_basic_idl_generation() {
-    let json = to_json("Test111111111111111111111111111111111111111", "test", "0.1.0", &[]);
+    let json = to_json(
+        "Test111111111111111111111111111111111111111",
+        "test",
+        "0.1.0",
+        &[],
+    );
 
     assert!(json.contains("\"address\": \"Test111111111111111111111111111111111111111\""));
     assert!(json.contains("\"name\": \"test\""));
@@ -249,7 +254,12 @@ fn test_idl_camel_case_conversion() {
 
 #[test]
 fn test_idl_complete_structure() {
-    let json = to_json("Test111111111111111111111111111111111111111", "test", "0.1.0", &[]);
+    let json = to_json(
+        "Test111111111111111111111111111111111111111",
+        "test",
+        "0.1.0",
+        &[],
+    );
 
     // Verify all required sections
     assert!(json.contains("\"address\":"));
@@ -263,7 +273,12 @@ fn test_idl_complete_structure() {
 
 #[test]
 fn test_idl_valid_json_structure() {
-    let json = to_json("Test111111111111111111111111111111111111111", "test", "0.1.0", &[]);
+    let json = to_json(
+        "Test111111111111111111111111111111111111111",
+        "test",
+        "0.1.0",
+        &[],
+    );
 
     // Verify JSON starts and ends correctly
     assert!(json.starts_with('{'));

@@ -32,7 +32,7 @@
 //! `Sysvar::get()` method which doesn't require an account. However,
 //! this uses more compute units.
 
-use pinocchio::{AccountView, error::ProgramError};
+use pinocchio::{error::ProgramError, AccountView};
 use solana_address::address_eq;
 
 use super::ids::*;
@@ -74,6 +74,14 @@ macro_rules! define_sysvar {
                 self.info
             }
         }
+
+        impl<'a> $name<'a> {
+            /// Returns the account's public key.
+            #[inline]
+            pub fn address(&self) -> &solana_address::Address {
+                self.info.address()
+            }
+        }
     };
 }
 
@@ -86,7 +94,9 @@ define_sysvar!(
 impl<'a> ClockSysvar<'a> {
     /// Get the Clock struct from this sysvar.
     #[inline]
-    pub fn get(&self) -> Result<pinocchio::account::Ref<'a, pinocchio::sysvars::clock::Clock>, ProgramError> {
+    pub fn get(
+        &self,
+    ) -> Result<pinocchio::account::Ref<'a, pinocchio::sysvars::clock::Clock>, ProgramError> {
         pinocchio::sysvars::clock::Clock::from_account_view(self.info)
     }
 
@@ -184,8 +194,8 @@ impl<'a> LastRestartSlotSysvar<'a> {
             pinocchio::syscalls::sol_get_sysvar(
                 LAST_RESTART_SLOT_SYSVAR_ID.as_ref().as_ptr(),
                 var_addr,
-                0,  // offset
-                core::mem::size_of::<LastRestartSlot>() as u64,  // length
+                0,                                              // offset
+                core::mem::size_of::<LastRestartSlot>() as u64, // length
             )
         };
 

@@ -33,7 +33,10 @@ impl Event for ComplexEvent {
 fn test_event_trait_constants() {
     assert_eq!(SimpleEvent::DISCRIMINATOR, [1, 2, 3, 4, 5, 6, 7, 8]);
     assert_eq!(SimpleEvent::NAME, "SimpleEvent");
-    assert_eq!(ComplexEvent::DISCRIMINATOR, [10, 20, 30, 40, 50, 60, 70, 80]);
+    assert_eq!(
+        ComplexEvent::DISCRIMINATOR,
+        [10, 20, 30, 40, 50, 60, 70, 80]
+    );
     assert_eq!(ComplexEvent::NAME, "ComplexEvent");
 }
 

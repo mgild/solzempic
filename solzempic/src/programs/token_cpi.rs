@@ -144,10 +144,7 @@ pub fn initialize_account<'a>(
         data: &instruction_data,
     };
 
-    pinocchio::cpi::invoke(
-        &instruction,
-        &[account, mint, owner, rent_sysvar],
-    )
+    pinocchio::cpi::invoke(&instruction, &[account, mint, owner, rent_sysvar])
 }
 
 /// Create associated token account via CPI
@@ -207,13 +204,7 @@ pub fn create_associated_token_account<'a>(
     // For CPI, only pass accounts that are in account_metas
     pinocchio::cpi::invoke(
         &instruction,
-        &[
-            payer,
-            token_account,
-            owner,
-            mint,
-            system_program,
-        ],
+        &[payer, token_account, owner, mint, system_program],
     )
 }
 
@@ -276,22 +267,13 @@ pub fn create_associated_token_account_idempotent<'a>(
     // For CPI, only pass accounts that are in account_metas
     pinocchio::cpi::invoke(
         &instruction,
-        &[
-            payer,
-            token_account,
-            owner,
-            mint,
-            system_program,
-        ],
+        &[payer, token_account, owner, mint, system_program],
     )
 }
 
 /// Derive associated token account address for SPL Token
 #[inline]
-pub fn get_associated_token_address(
-    owner: &Address,
-    mint: &Address,
-) -> Address {
+pub fn get_associated_token_address(owner: &Address, mint: &Address) -> Address {
     let seeds: &[&[u8]] = &[owner.as_ref(), TOKEN_PROGRAM_ID.as_ref(), mint.as_ref()];
     let (address, _bump) = Address::find_program_address(seeds, &ASSOCIATED_TOKEN_PROGRAM_ID);
     address
@@ -299,11 +281,12 @@ pub fn get_associated_token_address(
 
 /// Derive associated token account address for Token-2022
 #[inline]
-pub fn get_associated_token_address_22(
-    owner: &Address,
-    mint: &Address,
-) -> Address {
-    let seeds: &[&[u8]] = &[owner.as_ref(), TOKEN_2022_PROGRAM_ID.as_ref(), mint.as_ref()];
+pub fn get_associated_token_address_22(owner: &Address, mint: &Address) -> Address {
+    let seeds: &[&[u8]] = &[
+        owner.as_ref(),
+        TOKEN_2022_PROGRAM_ID.as_ref(),
+        mint.as_ref(),
+    ];
     let (address, _bump) = Address::find_program_address(seeds, &ASSOCIATED_TOKEN_PROGRAM_ID);
     address
 }
@@ -355,11 +338,7 @@ pub fn mint_to<'a>(
         data: &instruction_data,
     };
 
-    invoke_maybe_signed(
-        &instruction,
-        &[mint, destination, authority],
-        signer_seeds,
-    )
+    invoke_maybe_signed(&instruction, &[mint, destination, authority], signer_seeds)
 }
 
 /// Initialize a new mint account using InitializeMint2 (no rent sysvar required)
@@ -450,9 +429,5 @@ pub fn burn<'a>(
         data: &instruction_data,
     };
 
-    invoke_maybe_signed(
-        &instruction,
-        &[account, mint, authority],
-        signer_seeds,
-    )
+    invoke_maybe_signed(&instruction, &[account, mint, authority], signer_seeds)
 }

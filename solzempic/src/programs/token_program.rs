@@ -100,8 +100,13 @@ impl<'a> TryFrom<&'a AccountView> for TokenProgram<'a> {
     }
 }
 
-
 impl<'a> TokenProgram<'a> {
+    /// Returns the account's public key.
+    #[inline]
+    pub fn address(&self) -> &solana_address::Address {
+        self.info.address()
+    }
+
     /// Check if this is the Token-2022 program.
     ///
     /// Returns `true` if this wrapper holds the Token-2022 program,

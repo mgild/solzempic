@@ -3,8 +3,8 @@
 //! This module provides [`Lut`], a wrapper for Address Lookup Table accounts
 //! that handles both initialized and uninitialized states.
 
-use pinocchio::{AccountView, error::ProgramError, cpi::Signer};
-use solana_address::{Address, address_eq};
+use pinocchio::{cpi::Signer, error::ProgramError, AccountView};
+use solana_address::{address_eq, Address};
 
 use super::ids::{ADDRESS_LOOKUP_TABLE_PROGRAM_ID, SYSTEM_PROGRAM_ID};
 use super::traits::HasAccountView;
@@ -74,7 +74,10 @@ impl<'a> Lut<'a> {
 
         // System-owned = not created yet
         if address_eq(owner, &SYSTEM_PROGRAM_ID) {
-            return Ok(Self { info, initialized: false });
+            return Ok(Self {
+                info,
+                initialized: false,
+            });
         }
 
         // ALT program owned

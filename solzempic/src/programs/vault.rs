@@ -7,7 +7,7 @@
 //! - [`SolVault`] - Native SOL vault (system-owned account)
 
 use pinocchio::{error::ProgramError, AccountView};
-use solana_address::{Address, address_eq};
+use solana_address::{address_eq, Address};
 
 use super::ids::{SYSTEM_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID};
 use super::traits::HasAccountView;

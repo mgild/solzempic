@@ -3,7 +3,7 @@
 //! This module provides [`AtaProgram`], a validated wrapper for the
 //! Associated Token Account (ATA) program.
 
-use pinocchio::{AccountView, error::ProgramError};
+use pinocchio::{error::ProgramError, AccountView};
 use solana_address::address_eq;
 
 use super::ids::ASSOCIATED_TOKEN_PROGRAM_ID;
@@ -91,3 +91,10 @@ impl<'a> TryFrom<&'a AccountView> for AtaProgram<'a> {
     }
 }
 
+impl<'a> AtaProgram<'a> {
+    /// Returns the account's public key.
+    #[inline]
+    pub fn address(&self) -> &solana_address::Address {
+        self.info.address()
+    }
+}

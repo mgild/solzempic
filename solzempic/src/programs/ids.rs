@@ -57,8 +57,9 @@ use solana_address::Address;
 /// ownership is transferred to another program.
 ///
 /// Address: `11111111111111111111111111111111`
-pub const SYSTEM_PROGRAM_ID: Address =
-    Address::new_from_array(pinocchio_pubkey::pubkey!("11111111111111111111111111111111"));
+pub const SYSTEM_PROGRAM_ID: Address = Address::new_from_array(pinocchio_pubkey::pubkey!(
+    "11111111111111111111111111111111"
+));
 
 /// The SPL Token Program ID.
 ///
@@ -71,8 +72,9 @@ pub const SYSTEM_PROGRAM_ID: Address =
 /// use [`TOKEN_2022_PROGRAM_ID`] instead.
 ///
 /// Address: `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA`
-pub const TOKEN_PROGRAM_ID: Address =
-    Address::new_from_array(pinocchio_pubkey::pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"));
+pub const TOKEN_PROGRAM_ID: Address = Address::new_from_array(pinocchio_pubkey::pubkey!(
+    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+));
 
 /// The Token-2022 (Token Extensions) Program ID.
 ///
@@ -85,8 +87,9 @@ pub const TOKEN_PROGRAM_ID: Address =
 /// - Transfer fees
 ///
 /// Address: `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb`
-pub const TOKEN_2022_PROGRAM_ID: Address =
-    Address::new_from_array(pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"));
+pub const TOKEN_2022_PROGRAM_ID: Address = Address::new_from_array(pinocchio_pubkey::pubkey!(
+    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+));
 
 /// The Associated Token Account (ATA) Program ID.
 ///
@@ -102,8 +105,9 @@ pub const TOKEN_2022_PROGRAM_ID: Address =
 /// ```
 ///
 /// Address: `ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL`
-pub const ASSOCIATED_TOKEN_PROGRAM_ID: Address =
-    Address::new_from_array(pinocchio_pubkey::pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"));
+pub const ASSOCIATED_TOKEN_PROGRAM_ID: Address = Address::new_from_array(
+    pinocchio_pubkey::pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"),
+);
 
 /// The Address Lookup Table (ALT) Program ID.
 ///
@@ -118,8 +122,9 @@ pub const ASSOCIATED_TOKEN_PROGRAM_ID: Address =
 /// - Cross-program invocations
 ///
 /// Address: `AddressLookupTab1e1111111111111111111111111`
-pub const ADDRESS_LOOKUP_TABLE_PROGRAM_ID: Address =
-    Address::new_from_array(pinocchio_pubkey::pubkey!("AddressLookupTab1e1111111111111111111111111"));
+pub const ADDRESS_LOOKUP_TABLE_PROGRAM_ID: Address = Address::new_from_array(
+    pinocchio_pubkey::pubkey!("AddressLookupTab1e1111111111111111111111111"),
+);
 
 // ============================================================================
 // Token Mints
@@ -139,8 +144,9 @@ pub const ADDRESS_LOOKUP_TABLE_PROGRAM_ID: Address =
 /// 3. Call `syncNative` to register the wrapped amount
 ///
 /// Address: `So11111111111111111111111111111111111111112`
-pub const NATIVE_MINT: Address =
-    Address::new_from_array(pinocchio_pubkey::pubkey!("So11111111111111111111111111111111111111112"));
+pub const NATIVE_MINT: Address = Address::new_from_array(pinocchio_pubkey::pubkey!(
+    "So11111111111111111111111111111111111111112"
+));
 
 // ============================================================================
 // Sysvar IDs
@@ -163,8 +169,9 @@ pub const NATIVE_MINT: Address =
 /// ```
 ///
 /// Address: `SysvarC1ock11111111111111111111111111111111`
-pub const CLOCK_SYSVAR_ID: Address =
-    Address::new_from_array(pinocchio_pubkey::pubkey!("SysvarC1ock11111111111111111111111111111111"));
+pub const CLOCK_SYSVAR_ID: Address = Address::new_from_array(pinocchio_pubkey::pubkey!(
+    "SysvarC1ock11111111111111111111111111111111"
+));
 
 /// The Rent sysvar address.
 ///
@@ -176,8 +183,9 @@ pub const CLOCK_SYSVAR_ID: Address =
 /// Use this to calculate the minimum balance for rent exemption.
 ///
 /// Address: `SysvarRent111111111111111111111111111111111`
-pub const RENT_SYSVAR_ID: Address =
-    Address::new_from_array(pinocchio_pubkey::pubkey!("SysvarRent111111111111111111111111111111111"));
+pub const RENT_SYSVAR_ID: Address = Address::new_from_array(pinocchio_pubkey::pubkey!(
+    "SysvarRent111111111111111111111111111111111"
+));
 
 /// The SlotHashes sysvar address.
 ///
@@ -192,8 +200,9 @@ pub const RENT_SYSVAR_ID: Address =
 /// as it consumes significant transaction space.
 ///
 /// Address: `SysvarS1otHashes111111111111111111111111111`
-pub const SLOT_HASHES_SYSVAR_ID: Address =
-    Address::new_from_array(pinocchio_pubkey::pubkey!("SysvarS1otHashes111111111111111111111111111"));
+pub const SLOT_HASHES_SYSVAR_ID: Address = Address::new_from_array(pinocchio_pubkey::pubkey!(
+    "SysvarS1otHashes111111111111111111111111111"
+));
 
 /// The Instructions sysvar address.
 ///
@@ -208,8 +217,9 @@ pub const SLOT_HASHES_SYSVAR_ID: Address =
 /// - Signature verification
 ///
 /// Address: `Sysvar1nstructions1111111111111111111111111`
-pub const INSTRUCTIONS_SYSVAR_ID: Address =
-    Address::new_from_array(pinocchio_pubkey::pubkey!("Sysvar1nstructions1111111111111111111111111"));
+pub const INSTRUCTIONS_SYSVAR_ID: Address = Address::new_from_array(pinocchio_pubkey::pubkey!(
+    "Sysvar1nstructions1111111111111111111111111"
+));
 
 /// The RecentBlockhashes sysvar address (deprecated).
 ///
@@ -220,8 +230,9 @@ pub const INSTRUCTIONS_SYSVAR_ID: Address =
 /// and nonce-based replay protection.
 ///
 /// Address: `SysvarRecentB1ockHashes11111111111111111111`
-pub const RECENT_BLOCKHASHES_SYSVAR_ID: Address =
-    Address::new_from_array(pinocchio_pubkey::pubkey!("SysvarRecentB1ockHashes11111111111111111111"));
+pub const RECENT_BLOCKHASHES_SYSVAR_ID: Address = Address::new_from_array(
+    pinocchio_pubkey::pubkey!("SysvarRecentB1ockHashes11111111111111111111"),
+);
 
 /// The LastRestartSlot sysvar address.
 ///
@@ -233,5 +244,6 @@ pub const RECENT_BLOCKHASHES_SYSVAR_ID: Address =
 /// by outdated state.
 ///
 /// Address: `SysvarLastRestartS1ot1111111111111111111111`
-pub const LAST_RESTART_SLOT_SYSVAR_ID: Address =
-    Address::new_from_array(pinocchio_pubkey::pubkey!("SysvarLastRestartS1ot1111111111111111111111"));
+pub const LAST_RESTART_SLOT_SYSVAR_ID: Address = Address::new_from_array(
+    pinocchio_pubkey::pubkey!("SysvarLastRestartS1ot1111111111111111111111"),
+);

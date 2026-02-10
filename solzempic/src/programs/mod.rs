@@ -18,9 +18,9 @@
 //! }
 //! ```
 
-pub mod ids;
 mod alt;
 mod ata;
+pub mod ids;
 mod lut;
 mod mint;
 mod signer;
@@ -43,12 +43,15 @@ pub use lut::Lut;
 pub use mint::Mint;
 pub use signer::{MutSigner, Payer, ReadOnly, Signer, Writable};
 pub use system::SystemProgram;
-pub use sysvars::{ClockSysvar, InstructionsSysvar, LastRestartSlot, LastRestartSlotSysvar, RecentBlockhashesSysvar, RentSysvar, SlotHashesSysvar};
+pub use sysvars::{
+    ClockSysvar, InstructionsSysvar, LastRestartSlot, LastRestartSlotSysvar,
+    RecentBlockhashesSysvar, RentSysvar, SlotHashesSysvar,
+};
 pub use token_account::{TokenAccountData, TokenAccountInitBuilder, TokenAccountRefMut};
 pub use token_program::TokenProgram;
-pub use traits::{AccountSliceExt, HasAddress, HasAccountView, ValidatedAccount};
-pub use vault::{SolVault, Vault};
+pub use traits::{AccountSliceExt, HasAccountView, HasAddress, ValidatedAccount};
 pub use validation::{
     validate_clock_sysvar, validate_rent_sysvar, validate_slot_hashes_sysvar,
     validate_system_program, validate_token_program,
 };
+pub use vault::{SolVault, Vault};

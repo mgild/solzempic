@@ -110,7 +110,23 @@ pub fn validate_token_program(account: &AccountView) -> Result<(), ProgramError>
     Ok(())
 }
 
-define_validator!(validate_system_program, SYSTEM_PROGRAM_ID, "Validate that an account is the System Program.");
-define_validator!(validate_clock_sysvar, CLOCK_SYSVAR_ID, "Validate that an account is the Clock sysvar.");
-define_validator!(validate_slot_hashes_sysvar, SLOT_HASHES_SYSVAR_ID, "Validate that an account is the SlotHashes sysvar.");
-define_validator!(validate_rent_sysvar, RENT_SYSVAR_ID, "Validate that an account is the Rent sysvar.");
+define_validator!(
+    validate_system_program,
+    SYSTEM_PROGRAM_ID,
+    "Validate that an account is the System Program."
+);
+define_validator!(
+    validate_clock_sysvar,
+    CLOCK_SYSVAR_ID,
+    "Validate that an account is the Clock sysvar."
+);
+define_validator!(
+    validate_slot_hashes_sysvar,
+    SLOT_HASHES_SYSVAR_ID,
+    "Validate that an account is the SlotHashes sysvar."
+);
+define_validator!(
+    validate_rent_sysvar,
+    RENT_SYSVAR_ID,
+    "Validate that an account is the Rent sysvar."
+);

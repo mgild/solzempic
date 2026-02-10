@@ -93,7 +93,9 @@ fn test_boundary_event_256_bytes() {
 
 #[test]
 fn test_event_discriminator_prepending() {
-    let event = SmallEvent { value: 0x123456789ABCDEF0 };
+    let event = SmallEvent {
+        value: 0x123456789ABCDEF0,
+    };
 
     // Simulate what emit_event does
     let disc = SmallEvent::DISCRIMINATOR;
@@ -154,10 +156,10 @@ fn test_event_with_complex_layout() {
     #[repr(C)]
     #[derive(Clone, Copy, Pod, Zeroable)]
     struct ComplexEvent {
-        pub addresses: [Address; 2],  // 64 bytes (2 * 32)
-        pub amounts: [u64; 3],         // 24 bytes (3 * 8)
-        pub flags: [u8; 10],           // 10 bytes
-        pub _padding: [u8; 6],         // 6 bytes padding to align to 8
+        pub addresses: [Address; 2], // 64 bytes (2 * 32)
+        pub amounts: [u64; 3],       // 24 bytes (3 * 8)
+        pub flags: [u8; 10],         // 10 bytes
+        pub _padding: [u8; 6],       // 6 bytes padding to align to 8
     }
 
     impl Event for ComplexEvent {
@@ -166,7 +168,10 @@ fn test_event_with_complex_layout() {
     }
 
     let event = ComplexEvent {
-        addresses: [Address::new_from_array([1u8; 32]), Address::new_from_array([2u8; 32])],
+        addresses: [
+            Address::new_from_array([1u8; 32]),
+            Address::new_from_array([2u8; 32]),
+        ],
         amounts: [100, 200, 300],
         flags: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
         _padding: [0; 6],

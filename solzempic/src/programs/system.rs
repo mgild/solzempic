@@ -3,7 +3,7 @@
 //! This module provides [`SystemProgram`], a validated wrapper for the
 //! Solana System Program account.
 
-use pinocchio::{AccountView, error::ProgramError};
+use pinocchio::{error::ProgramError, AccountView};
 use solana_address::address_eq;
 
 use super::ids::SYSTEM_PROGRAM_ID;
@@ -91,3 +91,10 @@ impl<'a> TryFrom<&'a AccountView> for SystemProgram<'a> {
     }
 }
 
+impl<'a> SystemProgram<'a> {
+    /// Returns the account's public key.
+    #[inline]
+    pub fn address(&self) -> &solana_address::Address {
+        self.info.address()
+    }
+}

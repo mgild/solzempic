@@ -6,7 +6,7 @@
 use core::marker::PhantomData;
 
 use pinocchio::{error::ProgramError, AccountView};
-use solana_address::{Address, address_eq};
+use solana_address::{address_eq, Address};
 
 use crate::{check_discriminator, Framework, Loadable};
 

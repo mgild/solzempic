@@ -18,10 +18,10 @@
 //! }
 //! ```
 
-use alloc::string::{String, ToString};
+use crate::{AccountTypeMeta, EventMeta, InstructionMeta};
 use alloc::format;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use crate::{InstructionMeta, AccountTypeMeta, EventMeta};
 
 /// Configuration for IDL generation
 pub struct IdlConfig<'a> {
@@ -56,14 +56,23 @@ pub fn to_json(
     json.push_str("  \"instructions\": [\n");
     for (i, instr) in instructions.iter().enumerate() {
         json.push_str("    {\n");
-        json.push_str(&format!("      \"name\": \"{}\",\n", to_camel_case(instr.name)));
-        json.push_str(&format!("      \"discriminator\": [{}],\n", instr.discriminator));
+        json.push_str(&format!(
+            "      \"name\": \"{}\",\n",
+            to_camel_case(instr.name)
+        ));
+        json.push_str(&format!(
+            "      \"discriminator\": [{}],\n",
+            instr.discriminator
+        ));
 
         // Accounts
         json.push_str("      \"accounts\": [\n");
         for (j, acc) in instr.accounts.iter().enumerate() {
             json.push_str("        {\n");
-            json.push_str(&format!("          \"name\": \"{}\",\n", to_camel_case(acc.name)));
+            json.push_str(&format!(
+                "          \"name\": \"{}\",\n",
+                to_camel_case(acc.name)
+            ));
             json.push_str(&format!("          \"isMut\": {},\n", acc.is_writable));
             json.push_str(&format!("          \"isSigner\": {},\n", acc.is_signer));
             json.push_str("          \"isOptional\": false\n");
@@ -79,8 +88,14 @@ pub fn to_json(
         json.push_str("      \"args\": [\n");
         for (j, param) in instr.params.iter().enumerate() {
             json.push_str("        {\n");
-            json.push_str(&format!("          \"name\": \"{}\",\n", to_camel_case(param.name)));
-            json.push_str(&format!("          \"type\": {}\n", rust_type_to_idl_json(param.type_name)));
+            json.push_str(&format!(
+                "          \"name\": \"{}\",\n",
+                to_camel_case(param.name)
+            ));
+            json.push_str(&format!(
+                "          \"type\": {}\n",
+                rust_type_to_idl_json(param.type_name)
+            ));
             json.push_str("        }");
             if j < instr.params.len() - 1 {
                 json.push(',');
@@ -187,14 +202,23 @@ pub fn to_json_full_with_events(
     json.push_str("  \"instructions\": [\n");
     for (i, instr) in instructions.iter().enumerate() {
         json.push_str("    {\n");
-        json.push_str(&format!("      \"name\": \"{}\",\n", to_camel_case(instr.name)));
-        json.push_str(&format!("      \"discriminator\": [{}],\n", instr.discriminator));
+        json.push_str(&format!(
+            "      \"name\": \"{}\",\n",
+            to_camel_case(instr.name)
+        ));
+        json.push_str(&format!(
+            "      \"discriminator\": [{}],\n",
+            instr.discriminator
+        ));
 
         // Accounts
         json.push_str("      \"accounts\": [\n");
         for (j, acc) in instr.accounts.iter().enumerate() {
             json.push_str("        {\n");
-            json.push_str(&format!("          \"name\": \"{}\",\n", to_camel_case(acc.name)));
+            json.push_str(&format!(
+                "          \"name\": \"{}\",\n",
+                to_camel_case(acc.name)
+            ));
             json.push_str(&format!("          \"isMut\": {},\n", acc.is_writable));
             json.push_str(&format!("          \"isSigner\": {},\n", acc.is_signer));
             json.push_str("          \"isOptional\": false\n");
@@ -210,8 +234,14 @@ pub fn to_json_full_with_events(
         json.push_str("      \"args\": [\n");
         for (j, param) in instr.params.iter().enumerate() {
             json.push_str("        {\n");
-            json.push_str(&format!("          \"name\": \"{}\",\n", to_camel_case(param.name)));
-            json.push_str(&format!("          \"type\": {}\n", rust_type_to_idl_json(param.type_name)));
+            json.push_str(&format!(
+                "          \"name\": \"{}\",\n",
+                to_camel_case(param.name)
+            ));
+            json.push_str(&format!(
+                "          \"type\": {}\n",
+                rust_type_to_idl_json(param.type_name)
+            ));
             json.push_str("        }");
             if j < instr.params.len() - 1 {
                 json.push(',');
@@ -234,7 +264,10 @@ pub fn to_json_full_with_events(
         json.push_str("    {\n");
         json.push_str(&format!("      \"name\": \"{}\",\n", acc.name));
         // 8-byte discriminator array with value in first byte
-        json.push_str(&format!("      \"discriminator\": [{}, 0, 0, 0, 0, 0, 0, 0]\n", acc.discriminator));
+        json.push_str(&format!(
+            "      \"discriminator\": [{}, 0, 0, 0, 0, 0, 0, 0]\n",
+            acc.discriminator
+        ));
         json.push_str("    }");
         if i < accounts.len() - 1 {
             json.push(',');
@@ -253,8 +286,14 @@ pub fn to_json_full_with_events(
         json.push_str("        \"fields\": [\n");
         for (j, field) in acc.fields.iter().enumerate() {
             json.push_str("          {\n");
-            json.push_str(&format!("            \"name\": \"{}\",\n", to_camel_case(field.name)));
-            json.push_str(&format!("            \"type\": {}\n", rust_type_to_idl_json(field.type_name)));
+            json.push_str(&format!(
+                "            \"name\": \"{}\",\n",
+                to_camel_case(field.name)
+            ));
+            json.push_str(&format!(
+                "            \"type\": {}\n",
+                rust_type_to_idl_json(field.type_name)
+            ));
             json.push_str("          }");
             if j < acc.fields.len() - 1 {
                 json.push(',');
@@ -278,7 +317,9 @@ pub fn to_json_full_with_events(
         json.push_str(&format!("      \"name\": \"{}\",\n", event.name));
 
         // Convert discriminator to JSON array
-        let disc_str = event.discriminator.iter()
+        let disc_str = event
+            .discriminator
+            .iter()
             .map(|b| b.to_string())
             .collect::<Vec<_>>()
             .join(", ");
@@ -288,8 +329,14 @@ pub fn to_json_full_with_events(
         json.push_str("      \"fields\": [\n");
         for (j, field) in event.fields.iter().enumerate() {
             json.push_str("        {\n");
-            json.push_str(&format!("          \"name\": \"{}\",\n", to_camel_case(field.name)));
-            json.push_str(&format!("          \"type\": {}\n", rust_type_to_idl_json(field.type_name)));
+            json.push_str(&format!(
+                "          \"name\": \"{}\",\n",
+                to_camel_case(field.name)
+            ));
+            json.push_str(&format!(
+                "          \"type\": {}\n",
+                rust_type_to_idl_json(field.type_name)
+            ));
             json.push_str("        }");
             if j < event.fields.len() - 1 {
                 json.push(',');
@@ -354,10 +401,10 @@ fn rust_type_to_idl_json(rust_type: &str) -> String {
         "Pubkey" | "solana_address::Address" | "Address" => "\"pubkey\"".to_string(),
         s if s.starts_with("[") && s.ends_with("]") => {
             // Parse array type "[T; N]"
-            let inner = &s[1..s.len()-1];
+            let inner = &s[1..s.len() - 1];
             if let Some(semi_pos) = inner.rfind(';') {
                 let elem_type = inner[..semi_pos].trim();
-                let len_str = inner[semi_pos+1..].trim();
+                let len_str = inner[semi_pos + 1..].trim();
 
                 // Try to parse length as literal number
                 if let Ok(len) = len_str.parse::<usize>() {
@@ -397,7 +444,10 @@ mod tests {
     #[test]
     fn test_rust_type_to_idl_json() {
         assert_eq!(rust_type_to_idl_json("u64"), "\"u64\"");
-        assert_eq!(rust_type_to_idl_json("[u8; 8]"), "{ \"array\": [\"u8\", 8] }");
+        assert_eq!(
+            rust_type_to_idl_json("[u8; 8]"),
+            "{ \"array\": [\"u8\", 8] }"
+        );
         assert_eq!(rust_type_to_idl_json("Pubkey"), "\"pubkey\"");
     }
 }

@@ -88,7 +88,10 @@ fn test_fully_qualified_address() {
 
 #[test]
 fn test_fixed_array_u8() {
-    assert_eq!(rust_type_to_idl_json("[u8; 32]"), "{ \"array\": [\"u8\", 32] }");
+    assert_eq!(
+        rust_type_to_idl_json("[u8; 32]"),
+        "{ \"array\": [\"u8\", 32] }"
+    );
 }
 
 #[test]
@@ -109,7 +112,10 @@ fn test_fixed_array_pubkey() {
 
 #[test]
 fn test_array_single_element() {
-    assert_eq!(rust_type_to_idl_json("[u8; 1]"), "{ \"array\": [\"u8\", 1] }");
+    assert_eq!(
+        rust_type_to_idl_json("[u8; 1]"),
+        "{ \"array\": [\"u8\", 1] }"
+    );
 }
 
 #[test]

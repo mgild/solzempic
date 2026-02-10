@@ -211,10 +211,6 @@ impl<'a, T: Loadable, F: Framework> ShardRefContext<'a, T, F> {
     /// ```
     #[inline]
     pub fn all(&self) -> (&T, &T, &T) {
-        (
-            self.low.get(),
-            self.current.get(),
-            self.high.get(),
-        )
+        (self.low.get(), self.current.get(), self.high.get())
     }
 }

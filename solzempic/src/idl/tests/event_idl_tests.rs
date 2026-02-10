@@ -170,8 +170,24 @@ fn test_event_name_formats() {
 #[test]
 fn test_event_field_type_coverage() {
     let types = vec![
-        "u8", "u16", "u32", "u64", "u128", "i8", "i16", "i32", "i64", "i128", "f32", "f64",
-        "bool", "Address", "Pubkey", "[u8; 32]", "[u64; 4]", "CustomType",
+        "u8",
+        "u16",
+        "u32",
+        "u64",
+        "u128",
+        "i8",
+        "i16",
+        "i32",
+        "i64",
+        "i128",
+        "f32",
+        "f64",
+        "bool",
+        "Address",
+        "Pubkey",
+        "[u8; 32]",
+        "[u64; 4]",
+        "CustomType",
     ];
 
     for type_name in types {

@@ -7,9 +7,11 @@
 use core::marker::PhantomData;
 
 use pinocchio::{error::ProgramError, AccountView};
-use solana_address::{Address, address_eq};
+use solana_address::{address_eq, Address};
 
-use crate::{check_discriminator, create_pda_account, Framework, Initializable, Loadable, SYSTEM_PROGRAM_ID};
+use crate::{
+    check_discriminator, create_pda_account, Framework, Initializable, Loadable, SYSTEM_PROGRAM_ID,
+};
 
 use super::traits::AsAccountRef;
 
@@ -656,13 +658,7 @@ impl<'a> PdaInitBuilder<'a> {
         T: crate::traits::Initializable,
         F: crate::Framework,
     {
-        AccountRefMut::init_pda(
-            account,
-            self.payer,
-            self.system_program,
-            seeds,
-            T::LEN,
-        )
+        AccountRefMut::init_pda(account, self.payer, self.system_program, seeds, T::LEN)
     }
 
     /// Initialize a PDA account from a typed PDA object.
@@ -793,12 +789,6 @@ impl<'a> PdaInitBuilder<'a> {
         let seeds = pda.seeds();
         let seeds_slice = seeds.as_ref();
 
-        crate::create_pda_account(
-            self.payer,
-            account,
-            program_id,
-            space,
-            seeds_slice,
-        )
+        crate::create_pda_account(self.payer, account, program_id, space, seeds_slice)
     }
 }

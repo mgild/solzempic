@@ -29,10 +29,10 @@
 //! ```
 
 use pinocchio::{
-    AccountView,
     cpi::{invoke_signed, Seed, Signer},
     error::ProgramError,
     instruction::{InstructionAccount, InstructionView},
+    AccountView,
 };
 use solana_address::Address;
 

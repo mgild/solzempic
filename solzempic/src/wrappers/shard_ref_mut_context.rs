@@ -421,9 +421,7 @@ impl<'a, T: Loadable, F: Framework> ShardRefMutContext<'a, T, F> {
         let current_ptr = self.current_account_mut().get_mut() as *mut T;
         let high_ptr = self.high_account_mut().get_mut() as *mut T;
 
-        unsafe {
-            (&mut *low_ptr, &mut *current_ptr, &mut *high_ptr)
-        }
+        unsafe { (&mut *low_ptr, &mut *current_ptr, &mut *high_ptr) }
     }
 
     /// Get mutable access to all three shards' raw data slices simultaneously.
@@ -450,9 +448,7 @@ impl<'a, T: Loadable, F: Framework> ShardRefMutContext<'a, T, F> {
         let current_ptr = self.current_account_mut().data_mut() as *mut [u8];
         let high_ptr = self.high_account_mut().data_mut() as *mut [u8];
 
-        unsafe {
-            (&mut *low_ptr, &mut *current_ptr, &mut *high_ptr)
-        }
+        unsafe { (&mut *low_ptr, &mut *current_ptr, &mut *high_ptr) }
     }
 
     /// Get all three AccountRefMut references simultaneously.
@@ -469,14 +465,18 @@ impl<'a, T: Loadable, F: Framework> ShardRefMutContext<'a, T, F> {
     /// let current_data = current.data_mut();
     /// ```
     #[inline]
-    pub fn all_refs_mut(&mut self) -> (&mut AccountRefMut<'a, T, F>, &mut AccountRefMut<'a, T, F>, &mut AccountRefMut<'a, T, F>) {
+    pub fn all_refs_mut(
+        &mut self,
+    ) -> (
+        &mut AccountRefMut<'a, T, F>,
+        &mut AccountRefMut<'a, T, F>,
+        &mut AccountRefMut<'a, T, F>,
+    ) {
         // Safety: Same as all_mut() - we use raw pointers to allow intentional aliasing
         let low_ptr = &mut self.low as *mut AccountRefMut<'a, T, F>;
         let current_ptr = self.current_account_mut() as *mut AccountRefMut<'a, T, F>;
         let high_ptr = self.high_account_mut() as *mut AccountRefMut<'a, T, F>;
 
-        unsafe {
-            (&mut *low_ptr, &mut *current_ptr, &mut *high_ptr)
-        }
+        unsafe { (&mut *low_ptr, &mut *current_ptr, &mut *high_ptr) }
     }
 }

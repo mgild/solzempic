@@ -146,46 +146,84 @@ mod wrappers;
 #[cfg(feature = "idl")]
 pub mod idl;
 
-pub use account::{create_pda_account, rent_exempt_minimum, transfer_lamports, LAMPORTS_PER_BYTE, MAX_ACCOUNT_SIZE};
+pub use account::{
+    create_pda_account, rent_exempt_minimum, transfer_lamports, LAMPORTS_PER_BYTE, MAX_ACCOUNT_SIZE,
+};
 
 // Re-export programs module items at crate root for convenience
 pub use programs::{
-    // IDs
-    SYSTEM_PROGRAM_ID, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID,
-    ADDRESS_LOOKUP_TABLE_PROGRAM_ID, CLOCK_SYSVAR_ID, RENT_SYSVAR_ID, SLOT_HASHES_SYSVAR_ID,
-    INSTRUCTIONS_SYSVAR_ID, RECENT_BLOCKHASHES_SYSVAR_ID, LAST_RESTART_SLOT_SYSVAR_ID, NATIVE_MINT,
-    // Traits
-    ValidatedAccount, HasAddress, HasAccountView, AccountSliceExt,
-    // Program wrappers
-    SystemProgram, TokenProgram, AtaProgram, AltProgram, Lut,
-    // Signer/Payer/MutSigner
-    Signer, Payer, MutSigner,
-    // Explicit mutability wrappers (for raw AccountView)
-    Writable, ReadOnly,
-    // Sysvars
-    ClockSysvar, RentSysvar, SlotHashesSysvar, InstructionsSysvar, RecentBlockhashesSysvar,
-    LastRestartSlotSysvar, LastRestartSlot,
-    // Token
-    Mint, TokenAccountData, TokenAccountInitBuilder, TokenAccountRefMut, Vault, SolVault,
     // Token CPI
     token_cpi,
+    validate_clock_sysvar,
+    validate_rent_sysvar,
+    validate_slot_hashes_sysvar,
+    validate_system_program,
     // Validation
-    validate_token_program, validate_system_program, validate_clock_sysvar,
-    validate_slot_hashes_sysvar, validate_rent_sysvar,
+    validate_token_program,
+    AccountSliceExt,
+    AltProgram,
+    AtaProgram,
+    // Sysvars
+    ClockSysvar,
+    HasAccountView,
+    HasAddress,
+    InstructionsSysvar,
+    LastRestartSlot,
+    LastRestartSlotSysvar,
+    Lut,
+    // Token
+    Mint,
+    MutSigner,
+    Payer,
+    ReadOnly,
+    RecentBlockhashesSysvar,
+    RentSysvar,
+    // Signer/Payer/MutSigner
+    Signer,
+    SlotHashesSysvar,
+    SolVault,
+    // Program wrappers
+    SystemProgram,
+    TokenAccountData,
+    TokenAccountInitBuilder,
+    TokenAccountRefMut,
+    TokenProgram,
+    // Traits
+    ValidatedAccount,
+    Vault,
+    // Explicit mutability wrappers (for raw AccountView)
+    Writable,
+    ADDRESS_LOOKUP_TABLE_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+    CLOCK_SYSVAR_ID,
+    INSTRUCTIONS_SYSVAR_ID,
+    LAST_RESTART_SLOT_SYSVAR_ID,
+    NATIVE_MINT,
+    RECENT_BLOCKHASHES_SYSVAR_ID,
+    RENT_SYSVAR_ID,
+    SLOT_HASHES_SYSVAR_ID,
+    // IDs
+    SYSTEM_PROGRAM_ID,
+    TOKEN_2022_PROGRAM_ID,
+    TOKEN_PROGRAM_ID,
 };
 pub use wrappers::{
-    AccountRef, AccountRefMut, AsAccountRef, PdaInitBuilder, ShardRefContext, ShardRefMutContext,
-    ShardListNode, ShardListRef, ShardListRefMut,
+    AccountRef, AccountRefMut, AsAccountRef, PdaInitBuilder, ShardListNode, ShardListRef,
+    ShardListRefMut, ShardRefContext, ShardRefMutContext,
 };
 
 // Re-export core traits
-pub use traits::{check_discriminator, Account, FromTuplePda, Initializable, Loadable, Pda, PdaBase, PdaSeeds};
+pub use traits::{
+    check_discriminator, Account, FromTuplePda, Initializable, Loadable, Pda, PdaBase, PdaSeeds,
+};
 
 // Re-export event types
 pub use event::{emit_event, Event, EventFieldMeta, EventIdlMeta, EventMeta};
 
 // Re-export derive macros (Account derive renamed to avoid conflict with Account trait)
-pub use solzempic_macros::{Account as AccountDerive, SolzempicEntrypoint, account, event, instruction, params};
+pub use solzempic_macros::{
+    account, event, instruction, params, Account as AccountDerive, SolzempicEntrypoint,
+};
 
 /// Define an AccountType enum with automatic discriminator values.
 ///
@@ -261,10 +299,10 @@ macro_rules! define_account_types {
     };
 }
 
-use pinocchio::AccountView;
 use pinocchio::error::ProgramError;
-use solana_address::Address;
+use pinocchio::AccountView;
 use pinocchio::ProgramResult;
+use solana_address::Address;
 
 // Re-export address_eq for efficient pubkey comparisons (4 u64 comparisons vs byte-by-byte)
 pub use solana_address::address_eq;

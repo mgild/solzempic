@@ -7,8 +7,8 @@
 //!
 //! Both types work with SPL Token and Token-2022 accounts.
 
-use pinocchio::{AccountView, error::ProgramError};
-use solana_address::{Address, address_eq};
+use pinocchio::{error::ProgramError, AccountView};
+use solana_address::{address_eq, Address};
 
 use super::ids::{ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID};
 use super::traits::HasAccountView;
@@ -328,13 +328,17 @@ impl<'a> TokenAccountRefMut<'a> {
 
         // Skip CPI if already initialized - check owner is a token program
         let account_owner = unsafe { account.owner() };
-        if address_eq(account_owner, &TOKEN_PROGRAM_ID) || address_eq(account_owner, &TOKEN_2022_PROGRAM_ID) {
+        if address_eq(account_owner, &TOKEN_PROGRAM_ID)
+            || address_eq(account_owner, &TOKEN_2022_PROGRAM_ID)
+        {
             return Ok(());
         }
 
         // Verify token program
         let token_program_id = token_program.address();
-        if !address_eq(token_program_id, &TOKEN_PROGRAM_ID) && !address_eq(token_program_id, &TOKEN_2022_PROGRAM_ID) {
+        if !address_eq(token_program_id, &TOKEN_PROGRAM_ID)
+            && !address_eq(token_program_id, &TOKEN_2022_PROGRAM_ID)
+        {
             return Err(ProgramError::IllegalOwner);
         }
 
@@ -408,25 +412,53 @@ impl<'a> TokenAccountRefMut<'a> {
 
         // Skip CPI if already initialized
         let account_owner = unsafe { account.owner() };
-        if address_eq(account_owner, &TOKEN_PROGRAM_ID) || address_eq(account_owner, &TOKEN_2022_PROGRAM_ID) {
+        if address_eq(account_owner, &TOKEN_PROGRAM_ID)
+            || address_eq(account_owner, &TOKEN_2022_PROGRAM_ID)
+        {
             return Self::load(account);
         }
 
         // Verify token program
         let token_program_id = token_program.address();
-        if !address_eq(token_program_id, &TOKEN_PROGRAM_ID) && !address_eq(token_program_id, &TOKEN_2022_PROGRAM_ID) {
+        if !address_eq(token_program_id, &TOKEN_PROGRAM_ID)
+            && !address_eq(token_program_id, &TOKEN_2022_PROGRAM_ID)
+        {
             return Err(ProgramError::IllegalOwner);
         }
 
         let instruction_data = [1u8]; // CreateIdempotent
 
         let account_metas = [
-            pinocchio::instruction::InstructionAccount { address: owner.address(), is_writable: true, is_signer: true },
-            pinocchio::instruction::InstructionAccount { address: account.address(), is_writable: true, is_signer: false },
-            pinocchio::instruction::InstructionAccount { address: owner.address(), is_writable: false, is_signer: false },
-            pinocchio::instruction::InstructionAccount { address: mint.address(), is_writable: false, is_signer: false },
-            pinocchio::instruction::InstructionAccount { address: system_program.address(), is_writable: false, is_signer: false },
-            pinocchio::instruction::InstructionAccount { address: token_program_id, is_writable: false, is_signer: false },
+            pinocchio::instruction::InstructionAccount {
+                address: owner.address(),
+                is_writable: true,
+                is_signer: true,
+            },
+            pinocchio::instruction::InstructionAccount {
+                address: account.address(),
+                is_writable: true,
+                is_signer: false,
+            },
+            pinocchio::instruction::InstructionAccount {
+                address: owner.address(),
+                is_writable: false,
+                is_signer: false,
+            },
+            pinocchio::instruction::InstructionAccount {
+                address: mint.address(),
+                is_writable: false,
+                is_signer: false,
+            },
+            pinocchio::instruction::InstructionAccount {
+                address: system_program.address(),
+                is_writable: false,
+                is_signer: false,
+            },
+            pinocchio::instruction::InstructionAccount {
+                address: token_program_id,
+                is_writable: false,
+                is_signer: false,
+            },
         ];
 
         let instruction = pinocchio::instruction::InstructionView {
@@ -435,7 +467,10 @@ impl<'a> TokenAccountRefMut<'a> {
             data: &instruction_data,
         };
 
-        pinocchio::cpi::invoke(&instruction, &[owner, account, mint, system_program, token_program])?;
+        pinocchio::cpi::invoke(
+            &instruction,
+            &[owner, account, mint, system_program, token_program],
+        )?;
         Self::load(account)
     }
 
@@ -586,13 +621,7 @@ impl<'a> TokenAccountInitBuilder<'a> {
         token_program: &'a AccountView,
     ) -> Result<TokenAccountRefMut<'a>, ProgramError> {
         let owner = self.owner.ok_or(ProgramError::NotEnoughAccountKeys)?;
-        TokenAccountRefMut::init(
-            ata,
-            owner,
-            mint,
-            self.system_program,
-            token_program,
-        )
+        TokenAccountRefMut::init(ata, owner, mint, self.system_program, token_program)
     }
 
     /// Initialize an ATA idempotently using `TokenAccountRefMut::init_ata()`.
@@ -613,21 +642,16 @@ impl<'a> TokenAccountInitBuilder<'a> {
         // Determine token program from mint's owner
         let mint_view = mint.account_view();
         let token_program = if mint_view.owned_by(&TOKEN_2022_PROGRAM_ID) {
-            self.token_2022_program.ok_or(ProgramError::NotEnoughAccountKeys)?
+            self.token_2022_program
+                .ok_or(ProgramError::NotEnoughAccountKeys)?
         } else if mint_view.owned_by(&TOKEN_PROGRAM_ID) {
-            self.token_program.ok_or(ProgramError::NotEnoughAccountKeys)?
+            self.token_program
+                .ok_or(ProgramError::NotEnoughAccountKeys)?
         } else {
             return Err(ProgramError::IllegalOwner);
         };
 
-        TokenAccountRefMut::init_ata(
-            ata,
-            payer,
-            owner,
-            mint,
-            self.system_program,
-            token_program,
-        )?;
+        TokenAccountRefMut::init_ata(ata, payer, owner, mint, self.system_program, token_program)?;
         TokenAccountRefMut::load(ata)
     }
 }

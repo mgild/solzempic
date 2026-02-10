@@ -3,8 +3,8 @@
 //! This module provides [`Mint`], a validated wrapper for SPL Token mint
 //! accounts that provides convenient access to mint metadata.
 
-use pinocchio::{AccountView, error::ProgramError};
-use solana_address::{Address, address_eq};
+use pinocchio::{error::ProgramError, AccountView};
+use solana_address::{address_eq, Address};
 
 use super::ids::{TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID};
 use super::traits::{HasAccountView, HasAddress, ValidatedAccount};
@@ -129,7 +129,6 @@ impl<'a> TryFrom<&'a AccountView> for Mint<'a> {
     }
 }
 
-
 impl<'a> Mint<'a> {
     // SPL Token Mint layout (82 bytes):
     // 0-4:   mint_authority COption discriminant
@@ -168,9 +167,18 @@ impl<'a> Mint<'a> {
     #[inline]
     pub fn mint_authority(&self) -> Option<Address> {
         let data = unsafe { self.info.borrow_unchecked() };
-        let option = u32::from_le_bytes(data[Self::MINT_AUTHORITY_OPTION_OFFSET..Self::MINT_AUTHORITY_OPTION_OFFSET + 4].try_into().unwrap());
+        let option = u32::from_le_bytes(
+            data[Self::MINT_AUTHORITY_OPTION_OFFSET..Self::MINT_AUTHORITY_OPTION_OFFSET + 4]
+                .try_into()
+                .unwrap(),
+        );
         if option != 0 {
-            Some(Address::new_from_array(<[u8; 32]>::try_from(&data[Self::MINT_AUTHORITY_OFFSET..Self::MINT_AUTHORITY_OFFSET + 32]).unwrap()))
+            Some(Address::new_from_array(
+                <[u8; 32]>::try_from(
+                    &data[Self::MINT_AUTHORITY_OFFSET..Self::MINT_AUTHORITY_OFFSET + 32],
+                )
+                .unwrap(),
+            ))
         } else {
             None
         }
@@ -193,9 +201,18 @@ impl<'a> Mint<'a> {
     #[inline]
     pub fn freeze_authority(&self) -> Option<Address> {
         let data = unsafe { self.info.borrow_unchecked() };
-        let option = u32::from_le_bytes(data[Self::FREEZE_AUTHORITY_OPTION_OFFSET..Self::FREEZE_AUTHORITY_OPTION_OFFSET + 4].try_into().unwrap());
+        let option = u32::from_le_bytes(
+            data[Self::FREEZE_AUTHORITY_OPTION_OFFSET..Self::FREEZE_AUTHORITY_OPTION_OFFSET + 4]
+                .try_into()
+                .unwrap(),
+        );
         if option != 0 {
-            Some(Address::new_from_array(<[u8; 32]>::try_from(&data[Self::FREEZE_AUTHORITY_OFFSET..Self::FREEZE_AUTHORITY_OFFSET + 32]).unwrap()))
+            Some(Address::new_from_array(
+                <[u8; 32]>::try_from(
+                    &data[Self::FREEZE_AUTHORITY_OFFSET..Self::FREEZE_AUTHORITY_OFFSET + 32],
+                )
+                .unwrap(),
+            ))
         } else {
             None
         }
@@ -208,7 +225,11 @@ impl<'a> Mint<'a> {
     #[inline]
     pub fn supply(&self) -> u64 {
         let data = unsafe { self.info.borrow_unchecked() };
-        u64::from_le_bytes(data[Self::SUPPLY_OFFSET..Self::SUPPLY_OFFSET + 8].try_into().unwrap())
+        u64::from_le_bytes(
+            data[Self::SUPPLY_OFFSET..Self::SUPPLY_OFFSET + 8]
+                .try_into()
+                .unwrap(),
+        )
     }
 
     /// Get the number of decimal places for the token.
@@ -342,7 +363,10 @@ mod tests {
         // Verify truncated data is too short for decimals
         let data = vec![0u8; 40];
         assert!(data.len() < 82, "Truncated data should be too short");
-        assert!(data.get(44).is_none(), "Should not be able to access decimals offset");
+        assert!(
+            data.get(44).is_none(),
+            "Should not be able to access decimals offset"
+        );
     }
 
     #[test]

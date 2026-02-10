@@ -3,7 +3,7 @@
 //! This module provides [`AltProgram`], a validated wrapper for the
 //! Address Lookup Table (ALT) program.
 
-use pinocchio::{AccountView, error::ProgramError};
+use pinocchio::{error::ProgramError, AccountView};
 use solana_address::address_eq;
 
 use super::ids::ADDRESS_LOOKUP_TABLE_PROGRAM_ID;
@@ -91,3 +91,10 @@ impl<'a> TryFrom<&'a AccountView> for AltProgram<'a> {
     }
 }
 
+impl<'a> AltProgram<'a> {
+    /// Returns the account's public key.
+    #[inline]
+    pub fn address(&self) -> &solana_address::Address {
+        self.info.address()
+    }
+}

@@ -255,12 +255,7 @@ impl<'a, T: ShardListNode, F: Framework> ShardListRefMut<'a, T, F> {
             NextRef::AliasCurrent => Some(current_ptr),
         };
 
-        unsafe {
-            (
-                &mut *current_ptr,
-                next.map(|p| &mut *p),
-            )
-        }
+        unsafe { (&mut *current_ptr, next.map(|p| &mut *p)) }
     }
 
     /// Get mutable access to both shards' raw data slices.
@@ -276,12 +271,7 @@ impl<'a, T: ShardListNode, F: Framework> ShardListRefMut<'a, T, F> {
             NextRef::AliasCurrent => Some(current_ptr),
         };
 
-        unsafe {
-            (
-                &mut *current_ptr,
-                next.map(|p| &mut *p),
-            )
-        }
+        unsafe { (&mut *current_ptr, next.map(|p| &mut *p)) }
     }
 
     /// Check if this is the terminal shard (no successor in list).
@@ -338,8 +328,8 @@ impl<'a, T: ShardListNode, F: Framework> ShardListRefMut<'a, T, F> {
 // From Implementations
 // ============================================================================
 
-impl<'a, T: ShardListNode, F: Framework> From<(AccountRefMut<'a, T, F>, Option<AccountRefMut<'a, T, F>>)>
-    for ShardListRefMut<'a, T, F>
+impl<'a, T: ShardListNode, F: Framework>
+    From<(AccountRefMut<'a, T, F>, Option<AccountRefMut<'a, T, F>>)> for ShardListRefMut<'a, T, F>
 {
     /// Create a ShardListRefMut from a tuple of (current, optional next).
     ///

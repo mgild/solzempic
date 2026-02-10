@@ -85,7 +85,9 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, Expr, Lit, ItemImpl, ImplItem, ItemStruct, Type};
+use syn::{
+    parse_macro_input, Data, DeriveInput, Expr, Fields, ImplItem, ItemImpl, ItemStruct, Lit, Type,
+};
 
 // NOTE: Build-time IDL generation via proc macros was attempted but doesn't work reliably:
 // 1. Macro expansion order across files isn't deterministic
@@ -194,7 +196,9 @@ fn parse_variant_accounts(attrs: &[syn::Attribute]) -> Vec<(String, bool, bool, 
     for attr in attrs {
         if attr.path().is_ident("accounts") {
             // Parse the content as comma-separated name: constraint pairs
-            let content = attr.meta.require_list()
+            let content = attr
+                .meta
+                .require_list()
                 .expect("#[accounts(...)] requires a list");
 
             let tokens_str = content.tokens.to_string();
@@ -202,7 +206,9 @@ fn parse_variant_accounts(attrs: &[syn::Attribute]) -> Vec<(String, bool, bool, 
             // Parse "name: constraint, name2: constraint2" format
             for part in tokens_str.split(',') {
                 let part = part.trim();
-                if part.is_empty() { continue; }
+                if part.is_empty() {
+                    continue;
+                }
 
                 let (name, constraint) = if let Some(colon_pos) = part.find(':') {
                     let name = part[..colon_pos].trim().to_string();
@@ -240,7 +246,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         let trimmed = attr_str.trim();
         if trimmed.starts_with('"') && trimmed.ends_with('"') {
             // String literal: convert to pinocchio_pubkey::pubkey!() call
-            let pubkey_str = &trimmed[1..trimmed.len()-1];
+            let pubkey_str = &trimmed[1..trimmed.len() - 1];
             let pubkey_str_lit = syn::LitStr::new(pubkey_str, proc_macro2::Span::call_site());
             quote! { ::pinocchio_pubkey::pubkey!(#pubkey_str_lit) }
         } else {
@@ -257,30 +263,38 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
     };
 
     // Collect variant info (name, discriminator, and accounts)
-    let variant_info: Vec<_> = variants.iter().map(|variant| {
-        let variant_name = &variant.ident;
-        let discriminant = variant.discriminant.as_ref()
-            .expect("SolzempicEntrypoint requires explicit discriminant values");
-        let disc_expr = &discriminant.1;
-        let accounts = parse_variant_accounts(&variant.attrs);
-        (variant_name, disc_expr, accounts)
-    }).collect();
+    let variant_info: Vec<_> = variants
+        .iter()
+        .map(|variant| {
+            let variant_name = &variant.ident;
+            let discriminant = variant
+                .discriminant
+                .as_ref()
+                .expect("SolzempicEntrypoint requires explicit discriminant values");
+            let disc_expr = &discriminant.1;
+            let accounts = parse_variant_accounts(&variant.attrs);
+            (variant_name, disc_expr, accounts)
+        })
+        .collect();
 
     // Filter out any ShankInstruction derive from input attrs to avoid conflicts
-    let filtered_attrs: Vec<_> = attrs.iter().filter(|attr| {
-        if attr.path().is_ident("derive") {
-            // Check if the derive contains ShankInstruction
-            let content = attr.meta.require_list().ok();
-            if let Some(content) = content {
-                let tokens_str = content.tokens.to_string();
-                !tokens_str.contains("ShankInstruction")
+    let filtered_attrs: Vec<_> = attrs
+        .iter()
+        .filter(|attr| {
+            if attr.path().is_ident("derive") {
+                // Check if the derive contains ShankInstruction
+                let content = attr.meta.require_list().ok();
+                if let Some(content) = content {
+                    let tokens_str = content.tokens.to_string();
+                    !tokens_str.contains("ShankInstruction")
+                } else {
+                    true
+                }
             } else {
                 true
             }
-        } else {
-            true
-        }
-    }).collect();
+        })
+        .collect();
 
     // Generate TryFrom<u8> match arms
     let try_from_arms = variant_info.iter().map(|(name, disc, _)| {
@@ -339,17 +353,21 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         let num_accounts = accounts.len();
 
         // Generate account metadata array
-        let account_metas: Vec<proc_macro2::TokenStream> = accounts.iter().enumerate().map(|(idx, (acc_name, is_signer, is_writable, _is_program))| {
-            quote! {
-                ::solzempic::ShankAccountMeta {
-                    index: #idx,
-                    name: #acc_name,
-                    is_signer: #is_signer,
-                    is_writable: #is_writable,
-                    is_program: false,
+        let account_metas: Vec<proc_macro2::TokenStream> = accounts
+            .iter()
+            .enumerate()
+            .map(|(idx, (acc_name, is_signer, is_writable, _is_program))| {
+                quote! {
+                    ::solzempic::ShankAccountMeta {
+                        index: #idx,
+                        name: #acc_name,
+                        is_signer: #is_signer,
+                        is_writable: #is_writable,
+                        is_program: false,
+                    }
                 }
-            }
-        }).collect();
+            })
+            .collect();
 
         quote! {
             /// IDL metadata for #name instruction
@@ -620,13 +638,17 @@ pub fn instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     // Extract the methods
-    let methods: Vec<_> = input.items.iter().filter_map(|item| {
-        if let ImplItem::Fn(method) = item {
-            Some(method)
-        } else {
-            None
-        }
-    }).collect();
+    let methods: Vec<_> = input
+        .items
+        .iter()
+        .filter_map(|item| {
+            if let ImplItem::Fn(method) = item {
+                Some(method)
+            } else {
+                None
+            }
+        })
+        .collect();
 
     let struct_name_str = struct_name.to_string();
 
@@ -699,13 +721,20 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
                         is_program: false,
                     }
                 });
-                shank_attr_strings.push(format!("#[account({}, writable, name=\"{}\")]", idx, nested_name));
+                shank_attr_strings.push(format!(
+                    "#[account({}, writable, name=\"{}\")]",
+                    idx, nested_name
+                ));
             }
             current_idx += expand_count;
         } else {
             let mut constraints = Vec::new();
-            if is_writable { constraints.push("writable"); }
-            if is_signer { constraints.push("signer"); }
+            if is_writable {
+                constraints.push("writable");
+            }
+            if is_signer {
+                constraints.push("signer");
+            }
 
             let constraints_str = if constraints.is_empty() {
                 String::new()
@@ -713,7 +742,10 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
                 format!(", {}", constraints.join(", "))
             };
 
-            shank_attr_strings.push(format!("#[account({}{}, name=\"{}\")]", current_idx, constraints_str, field_name_str));
+            shank_attr_strings.push(format!(
+                "#[account({}{}, name=\"{}\")]",
+                current_idx, constraints_str, field_name_str
+            ));
 
             account_metas.push(quote! {
                 ::solzempic::ShankAccountMeta {
@@ -944,8 +976,8 @@ fn analyze_field_type(ty: &Type) -> (bool, bool, bool, usize) {
                 match type_name.as_str() {
                     // Signer types
                     "Signer" => (true, false, false, 1),
-                    "MutSigner" => (true, true, false, 1),  // signer + writable
-                    "Payer" => (true, true, false, 1),      // payers are always signer + writable
+                    "MutSigner" => (true, true, false, 1), // signer + writable
+                    "Payer" => (true, true, false, 1),     // payers are always signer + writable
 
                     // Writable account types
                     "AccountRefMut" => (false, true, false, 1),
@@ -962,7 +994,7 @@ fn analyze_field_type(ty: &Type) -> (bool, bool, bool, usize) {
                     "ReadOnly" => (false, false, false, 1),
 
                     // Writable specialized types
-                    "Lut" => (false, true, false, 1),  // LUTs are typically created/modified
+                    "Lut" => (false, true, false, 1), // LUTs are typically created/modified
 
                     // Program types
                     "SystemProgram" => (false, false, true, 1),
@@ -972,8 +1004,8 @@ fn analyze_field_type(ty: &Type) -> (bool, bool, bool, usize) {
                     "Token2022Program" => (false, false, true, 1),
 
                     // Shard context expands to 3 accounts
-                    "ShardRefContext" => (false, false, false, 3),  // read-only
-                    "ShardRefMutContext" => (false, true, false, 3),  // writable
+                    "ShardRefContext" => (false, false, false, 3), // read-only
+                    "ShardRefMutContext" => (false, true, false, 3), // writable
 
                     _ => (false, false, false, 1),
                 }
@@ -1055,7 +1087,10 @@ pub fn account(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Check if struct has a discriminator field
     let has_discriminator_field = fields.iter().any(|f| {
-        f.ident.as_ref().map(|i| i == "discriminator").unwrap_or(false)
+        f.ident
+            .as_ref()
+            .map(|i| i == "discriminator")
+            .unwrap_or(false)
     });
 
     // Generate Loadable impl if discriminator provided
@@ -1088,16 +1123,19 @@ pub fn account(attr: TokenStream, item: TokenStream) -> TokenStream {
     });
 
     // Generate field metadata for IDL
-    let field_metas: Vec<_> = fields.iter().map(|f| {
-        let field_name = f.ident.as_ref().expect("named field").to_string();
-        let field_type = type_to_string(&f.ty);
-        quote! {
-            ::solzempic::FieldMeta {
-                name: #field_name,
-                type_name: #field_type,
+    let field_metas: Vec<_> = fields
+        .iter()
+        .map(|f| {
+            let field_name = f.ident.as_ref().expect("named field").to_string();
+            let field_type = type_to_string(&f.ty);
+            quote! {
+                ::solzempic::FieldMeta {
+                    name: #field_name,
+                    type_name: #field_type,
+                }
             }
-        }
-    }).collect();
+        })
+        .collect();
 
     let name_str = name.to_string();
 
@@ -1167,9 +1205,11 @@ pub fn account(attr: TokenStream, item: TokenStream) -> TokenStream {
 fn extract_discriminator(attrs: &[syn::Attribute]) -> Option<u8> {
     for attr in attrs {
         if attr.path().is_ident("account") {
-            let nested = attr.parse_args_with(
-                syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated
-            ).ok()?;
+            let nested = attr
+                .parse_args_with(
+                    syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
+                )
+                .ok()?;
 
             for meta in nested {
                 if let syn::Meta::NameValue(nv) = meta {
@@ -1255,17 +1295,20 @@ pub fn params(_attr: TokenStream, item: TokenStream) -> TokenStream {
     });
 
     // Generate ParamField metadata
-    let param_fields: Vec<_> = fields.iter().map(|f| {
-        let field_name = f.ident.as_ref().expect("Named field required");
-        let field_name_str = field_name.to_string();
-        let type_str = type_to_string(&f.ty);
-        quote! {
-            ::solzempic::ParamField {
-                name: #field_name_str,
-                type_name: #type_str,
+    let param_fields: Vec<_> = fields
+        .iter()
+        .map(|f| {
+            let field_name = f.ident.as_ref().expect("Named field required");
+            let field_name_str = field_name.to_string();
+            let type_str = type_to_string(&f.ty);
+            quote! {
+                ::solzempic::ParamField {
+                    name: #field_name_str,
+                    type_name: #type_str,
+                }
             }
-        }
-    }).collect();
+        })
+        .collect();
 
     let expanded = quote! {
         #[repr(C)]
@@ -1292,12 +1335,13 @@ pub fn params(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Convert a type to its string representation for IDL.
 fn type_to_string(ty: &Type) -> String {
     match ty {
-        Type::Path(tp) => {
-            tp.path.segments.iter()
-                .map(|s| s.ident.to_string())
-                .collect::<Vec<_>>()
-                .join("::")
-        }
+        Type::Path(tp) => tp
+            .path
+            .segments
+            .iter()
+            .map(|s| s.ident.to_string())
+            .collect::<Vec<_>>()
+            .join("::"),
         Type::Array(arr) => {
             let elem = type_to_string(&arr.elem);
             let len = &arr.len;
@@ -1401,16 +1445,19 @@ pub fn event(_attr: TokenStream, item: TokenStream) -> TokenStream {
     });
 
     // Generate field metadata for IDL
-    let field_metas: Vec<_> = fields.iter().map(|f| {
-        let field_name = f.ident.as_ref().expect("named field").to_string();
-        let field_type = type_to_string(&f.ty);
-        quote! {
-            ::solzempic::EventFieldMeta {
-                name: #field_name,
-                type_name: #field_type,
+    let field_metas: Vec<_> = fields
+        .iter()
+        .map(|f| {
+            let field_name = f.ident.as_ref().expect("named field").to_string();
+            let field_type = type_to_string(&f.ty);
+            quote! {
+                ::solzempic::EventFieldMeta {
+                    name: #field_name,
+                    type_name: #field_type,
+                }
             }
-        }
-    }).collect();
+        })
+        .collect();
 
     let name_str = name.to_string();
 

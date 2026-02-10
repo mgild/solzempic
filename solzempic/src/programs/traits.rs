@@ -65,7 +65,6 @@ impl HasAddress for Address {
     }
 }
 
-
 impl HasAccountView for AccountView {
     #[inline]
     fn account_view(&self) -> &AccountView {
@@ -115,7 +114,6 @@ impl AccountSliceExt for [AccountView] {
             .try_into()
     }
 }
-
 
 /// Trait for validated program and sysvar account wrappers.
 ///
