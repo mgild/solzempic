@@ -64,18 +64,14 @@ use super::traits::AsAccountRef;
 /// )?;
 /// ```
 ///
-/// # Post-CPI Reload
+/// # Interior Mutability
 ///
-/// After any CPI that might modify the account, call [`reload`](Self::reload)
-/// to refresh the data reference:
+/// `AccountRefMut` does not cache a `&mut [u8]` borrow. Instead, it re-borrows
+/// from `info` on demand via `borrow_unchecked_mut()`. This means:
 ///
-/// ```ignore
-/// // Perform CPI that modifies account...
-/// invoke(&instruction, &account_infos)?;
-///
-/// // Refresh our view of the data
-/// account.reload();
-/// ```
+/// - Multiple `AccountRefMut` values can coexist in the same struct
+/// - No need to call `reload()` after CPI (data is always fresh)
+/// - Context structs like `FillCtx` can freely hold several writable accounts
 ///
 /// # Performance
 ///
@@ -95,7 +91,6 @@ use super::traits::AsAccountRef;
 pub struct AccountRefMut<'a, T: Loadable, F: Framework> {
     /// The underlying AccountView reference.
     pub info: &'a AccountView,
-    data: &'a mut [u8],
     /// PDA bump seed (populated when created via init_pda)
     pda_bump: Option<u8>,
     _marker: PhantomData<(T, F)>,
@@ -192,7 +187,7 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
     /// * [`ProgramError::InvalidAccountData`] - Data too small or wrong discriminator
     #[inline]
     pub fn load_unchecked(info: &'a AccountView) -> Result<Self, ProgramError> {
-        let data = unsafe { info.borrow_unchecked_mut() };
+        let data = unsafe { info.borrow_unchecked() };
 
         if data.len() < T::LEN {
             return Err(crate::errors::invalid_account_data());
@@ -204,7 +199,6 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
 
         Ok(Self {
             info,
-            data,
             pda_bump: None,
             _marker: PhantomData,
         })
@@ -239,7 +233,8 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
     /// ```
     #[inline]
     pub fn get(&self) -> &T {
-        bytemuck::from_bytes(&self.data[..T::LEN])
+        let data = unsafe { self.info.borrow_unchecked() };
+        bytemuck::from_bytes(&data[..T::LEN])
     }
 
     /// Get a mutable reference to the parsed account data.
@@ -262,7 +257,8 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
     /// There's no need for an explicit "save" or "commit" operation.
     #[inline]
     pub fn get_mut(&mut self) -> &mut T {
-        bytemuck::from_bytes_mut(&mut self.data[..T::LEN])
+        let data = unsafe { self.info.borrow_unchecked_mut() };
+        bytemuck::from_bytes_mut(&mut data[..T::LEN])
     }
 
     /// Get the full account data slice.
@@ -272,7 +268,7 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
     /// beyond the header.
     #[inline]
     pub fn data(&self) -> &[u8] {
-        self.data
+        unsafe { self.info.borrow_unchecked() }
     }
 
     /// Get the full account data slice mutably.
@@ -289,36 +285,16 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
     /// ```
     #[inline]
     pub fn data_mut(&mut self) -> &mut [u8] {
-        self.data
+        unsafe { self.info.borrow_unchecked_mut() }
     }
 
-    /// Reload data reference after CPI.
+    /// No-op kept for API compatibility.
     ///
-    /// After any CPI that might modify this account's data, call this method
-    /// to refresh the internal data reference. This ensures subsequent reads
-    /// see the updated state.
-    ///
-    /// # When to Call
-    ///
-    /// Call `reload()` after:
-    /// - Any `invoke()` or `invoke_signed()` that includes this account
-    /// - Token transfers to/from this account
-    /// - Any external program modification
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// // Transfer tokens to vault
-    /// token_program::transfer(&source, &vault, &authority, amount)?;
-    ///
-    /// // Refresh our view before reading updated balance
-    /// vault.reload();
-    /// let new_balance = vault.get().amount();
-    /// ```
+    /// Previously needed to refresh a cached `&mut [u8]` after CPI.
+    /// Now that data is re-borrowed on demand from `info`, this is unnecessary.
+    /// Existing call sites can be left in place without harm.
     #[inline]
-    pub fn reload(&mut self) {
-        self.data = unsafe { self.info.borrow_unchecked_mut() };
-    }
+    pub fn reload(&mut self) {}
 
     /// Check if this account is a PDA derived from the given seeds.
     ///
@@ -411,12 +387,14 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
         if !Self::is_uninit(info) {
             return Err(crate::errors::account_already_initialized());
         }
-        let data = unsafe { info.borrow_unchecked_mut() };
-        if data.len() < T::LEN {
-            return Err(crate::errors::invalid_account_data());
+        {
+            let data = unsafe { info.borrow_unchecked_mut() };
+            if data.len() < T::LEN {
+                return Err(crate::errors::invalid_account_data());
+            }
+            // Write discriminator byte
+            data[0] = T::DISCRIMINATOR;
         }
-        // Write discriminator byte
-        data[0] = T::DISCRIMINATOR;
         Self::load_unchecked(info)
     }
 
@@ -456,12 +434,14 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
             return Err(crate::errors::account_not_writable());
         }
         if Self::is_uninit(info) {
-            let data = unsafe { info.borrow_unchecked_mut() };
-            if data.len() < T::LEN {
-                return Err(crate::errors::invalid_account_data());
+            {
+                let data = unsafe { info.borrow_unchecked_mut() };
+                if data.len() < T::LEN {
+                    return Err(crate::errors::invalid_account_data());
+                }
+                // Write discriminator byte
+                data[0] = T::DISCRIMINATOR;
             }
-            // Write discriminator byte
-            data[0] = T::DISCRIMINATOR;
         }
         Self::load_unchecked(info)
     }
@@ -544,8 +524,10 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
         create_pda_account(payer, info, &F::PROGRAM_ID, space, seeds)?;
 
         // Initialize: write discriminator byte
-        let data = unsafe { info.borrow_unchecked_mut() };
-        data[0] = T::DISCRIMINATOR;
+        {
+            let data = unsafe { info.borrow_unchecked_mut() };
+            data[0] = T::DISCRIMINATOR;
+        }
 
         let mut account = Self::load_unchecked(info)?;
         account.pda_bump = pda_bump;
@@ -566,7 +548,8 @@ impl<'a, T: Loadable, F: Framework> AsAccountRef<'a, T, F> for AccountRefMut<'a,
 
     #[inline]
     fn get(&self) -> &T {
-        bytemuck::from_bytes(&self.data[..T::LEN])
+        let data = unsafe { self.info.borrow_unchecked() };
+        bytemuck::from_bytes(&data[..T::LEN])
     }
 
     #[inline]
