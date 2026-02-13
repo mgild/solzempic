@@ -704,14 +704,14 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
         let field_name_str = field_name.to_string();
         let field_ty = &field.ty;
 
-        let (is_signer, is_writable, is_program, expand_count) = analyze_field_type(field_ty);
+        // Check for #[group(N)] attribute first — overrides analyze_field_type
+        let group_count = extract_group_count(&field.attrs);
 
-        if expand_count > 1 {
-            // Generate nested shard names: {field_name}_low_shard, {field_name}_current_shard, {field_name}_high_shard
-            let shard_suffixes = ["low_shard", "current_shard", "high_shard"];
-            for (i, suffix) in shard_suffixes.iter().enumerate() {
+        if let Some(n) = group_count {
+            // Account group: generate N writable account metas named {field}_{0} .. {field}_{N-1}
+            for i in 0..n {
                 let idx = current_idx + i;
-                let nested_name = format!("{}_{}", field_name_str, suffix);
+                let nested_name = format!("{}_{}", field_name_str, i);
                 account_metas.push(quote! {
                     ::solzempic::ShankAccountMeta {
                         index: #idx,
@@ -724,6 +724,42 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
                 shank_attr_strings.push(format!(
                     "#[account({}, writable, name=\"{}\")]",
                     idx, nested_name
+                ));
+            }
+            current_idx += n;
+        } else {
+
+        let (is_signer, is_writable, is_program, expand_count) = analyze_field_type(field_ty);
+
+        if expand_count > 1 {
+            // Determine suffixes based on type name
+            let type_name = match field_ty {
+                Type::Path(type_path) => type_path.path.segments.last()
+                    .map(|s| s.ident.to_string())
+                    .unwrap_or_default(),
+                _ => String::new(),
+            };
+            let shard_suffixes: &[&str] = match type_name.as_str() {
+                "ShardListRefMut" | "ShardListRef" => &["current", "next"],
+                _ => &["low_shard", "current_shard", "high_shard"],
+            };
+            for (i, suffix) in shard_suffixes.iter().enumerate() {
+                let idx = current_idx + i;
+                let nested_name = format!("{}_{}", field_name_str, suffix);
+                account_metas.push(quote! {
+                    ::solzempic::ShankAccountMeta {
+                        index: #idx,
+                        name: #nested_name,
+                        is_signer: false,
+                        is_writable: #is_writable,
+                        is_program: false,
+                    }
+                });
+                shank_attr_strings.push(format!(
+                    "#[account({}{}, name=\"{}\")]",
+                    idx,
+                    if is_writable { ", writable" } else { "" },
+                    nested_name
                 ));
             }
             current_idx += expand_count;
@@ -758,6 +794,8 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
             });
             current_idx += 1;
         }
+
+        } // close group_count else
     }
 
     let num_accounts = account_metas.len();
@@ -767,7 +805,10 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
         let field_name = &f.ident;
         let field_ty = &f.ty;
         let field_vis = &f.vis;
-        let field_attrs = &f.attrs;
+        // Filter out #[group(N)] attributes so they don't appear in struct output
+        let field_attrs: Vec<_> = f.attrs.iter()
+            .filter(|a| !a.path().is_ident("group"))
+            .collect();
         quote! {
             #(#field_attrs)*
             #field_vis #field_name: #field_ty
@@ -1003,9 +1044,13 @@ fn analyze_field_type(ty: &Type) -> (bool, bool, bool, usize) {
                     "AltProgram" => (false, false, true, 1),
                     "Token2022Program" => (false, false, true, 1),
 
-                    // Shard context expands to 3 accounts
+                    // Shard context expands to 3 accounts (low/current/high)
                     "ShardRefContext" => (false, false, false, 3), // read-only
                     "ShardRefMutContext" => (false, true, false, 3), // writable
+
+                    // Shard list expands to 2 accounts (current/next)
+                    "ShardListRefMut" => (false, true, false, 2), // writable
+                    "ShardListRef" => (false, false, false, 2),   // read-only
 
                     _ => (false, false, false, 1),
                 }
@@ -1182,6 +1227,20 @@ pub fn account(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(expanded)
+}
+
+/// Extract group count from `#[group(N)]` attribute on a field.
+///
+/// Returns `Some(N)` if the field has a `#[group(N)]` attribute, `None` otherwise.
+/// Used by `instruction_struct_impl` to handle account group fields.
+fn extract_group_count(attrs: &[syn::Attribute]) -> Option<usize> {
+    for attr in attrs {
+        if attr.path().is_ident("group") {
+            let lit: syn::LitInt = attr.parse_args().ok()?;
+            return lit.base10_parse::<usize>().ok();
+        }
+    }
+    None
 }
 
 /// Extract discriminator value from `#[account(discriminator = N)]` attribute.

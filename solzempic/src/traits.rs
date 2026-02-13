@@ -252,6 +252,44 @@ impl<S: PdaSeeds, T> Pda for PdaBase<S, T> {
     }
 }
 
+// ============================================================================
+// Account Group Trait
+// ============================================================================
+
+/// Trait for account groups that load from a contiguous slice of `AccountView`s.
+///
+/// Account groups bundle multiple related accounts into a single struct that
+/// can be loaded as a unit. The `ACCOUNT_COUNT` constant tells the instruction
+/// macro how many account slots to reserve when the field is annotated with
+/// `#[group(N)]`.
+///
+/// # Example
+///
+/// ```ignore
+/// pub struct MarketCtx<'a> {
+///     pub market: AccountRefMut<'a, Market>,
+///     pub shards: ShardListRefMut<'a, OrderShardHeader>,
+/// }
+///
+/// impl<'a> AccountGroup<'a> for MarketCtx<'a> {
+///     const ACCOUNT_COUNT: usize = 3; // 1 + 2 (ShardListRefMut)
+///
+///     fn load(accounts: &'a [AccountView]) -> Result<Self, ProgramError> {
+///         Ok(Self {
+///             market: AccountRefMut::load(&accounts[0])?,
+///             shards: ShardListRefMut::with_next(&accounts[1], &accounts[2])?,
+///         })
+///     }
+/// }
+/// ```
+pub trait AccountGroup<'a>: Sized {
+    /// Number of account slots this group occupies in the instruction.
+    const ACCOUNT_COUNT: usize;
+
+    /// Load the group from a contiguous slice of account views.
+    fn load(accounts: &'a [pinocchio::AccountView]) -> Result<Self, ProgramError>;
+}
+
 /// Trait for account types that can construct a PDA from a tuple.
 ///
 /// This enables type-driven PDA construction where the account type
