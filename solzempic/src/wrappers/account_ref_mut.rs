@@ -559,6 +559,20 @@ impl<'a, T: Loadable, F: Framework> AsAccountRef<'a, T, F> for AccountRefMut<'a,
     }
 }
 
+impl<'a, T: Loadable, F: Framework> crate::AsAccountView for AccountRefMut<'a, T, F> {
+    #[inline]
+    fn as_account_view(&self) -> &AccountView {
+        self.info
+    }
+}
+
+impl<'a, T: Loadable, F: Framework> crate::AsAccountView for &AccountRefMut<'a, T, F> {
+    #[inline]
+    fn as_account_view(&self) -> &AccountView {
+        self.info
+    }
+}
+
 // ============================================================================
 // PDA Init Builder
 // ============================================================================

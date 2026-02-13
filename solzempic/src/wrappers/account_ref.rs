@@ -224,6 +224,20 @@ impl<'a, T: Loadable, F: Framework> AsAccountRef<'a, T, F> for AccountRef<'a, T,
     }
 }
 
+impl<'a, T: Loadable, F: Framework> crate::AsAccountView for AccountRef<'a, T, F> {
+    #[inline]
+    fn as_account_view(&self) -> &AccountView {
+        self.info
+    }
+}
+
+impl<'a, T: Loadable, F: Framework> crate::AsAccountView for &AccountRef<'a, T, F> {
+    #[inline]
+    fn as_account_view(&self) -> &AccountView {
+        self.info
+    }
+}
+
 impl<'a, T: Loadable, F: Framework> crate::HasAddress for AccountRef<'a, T, F> {
     #[inline]
     fn address(&self) -> &Address {
