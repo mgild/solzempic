@@ -233,6 +233,13 @@ impl<S, T> PdaBase<S, T> {
     }
 }
 
+impl<S, T> crate::HasAddress for PdaBase<S, T> {
+    #[inline]
+    fn address(&self) -> &solana_address::Address {
+        &self.address
+    }
+}
+
 impl<S: PdaSeeds, T> Pda for PdaBase<S, T> {
     type AccountType = T;
 

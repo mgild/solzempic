@@ -728,73 +728,74 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
             }
             current_idx += n;
         } else {
+            let (is_signer, is_writable, is_program, expand_count) = analyze_field_type(field_ty);
 
-        let (is_signer, is_writable, is_program, expand_count) = analyze_field_type(field_ty);
+            if expand_count > 1 {
+                // Determine suffixes based on type name
+                let type_name = match field_ty {
+                    Type::Path(type_path) => type_path
+                        .path
+                        .segments
+                        .last()
+                        .map(|s| s.ident.to_string())
+                        .unwrap_or_default(),
+                    _ => String::new(),
+                };
+                let shard_suffixes: &[&str] = match type_name.as_str() {
+                    "ShardListRefMut" | "ShardListRef" => &["current", "next"],
+                    _ => &["low_shard", "current_shard", "high_shard"],
+                };
+                for (i, suffix) in shard_suffixes.iter().enumerate() {
+                    let idx = current_idx + i;
+                    let nested_name = format!("{}_{}", field_name_str, suffix);
+                    account_metas.push(quote! {
+                        ::solzempic::ShankAccountMeta {
+                            index: #idx,
+                            name: #nested_name,
+                            is_signer: false,
+                            is_writable: #is_writable,
+                            is_program: false,
+                        }
+                    });
+                    shank_attr_strings.push(format!(
+                        "#[account({}{}, name=\"{}\")]",
+                        idx,
+                        if is_writable { ", writable" } else { "" },
+                        nested_name
+                    ));
+                }
+                current_idx += expand_count;
+            } else {
+                let mut constraints = Vec::new();
+                if is_writable {
+                    constraints.push("writable");
+                }
+                if is_signer {
+                    constraints.push("signer");
+                }
 
-        if expand_count > 1 {
-            // Determine suffixes based on type name
-            let type_name = match field_ty {
-                Type::Path(type_path) => type_path.path.segments.last()
-                    .map(|s| s.ident.to_string())
-                    .unwrap_or_default(),
-                _ => String::new(),
-            };
-            let shard_suffixes: &[&str] = match type_name.as_str() {
-                "ShardListRefMut" | "ShardListRef" => &["current", "next"],
-                _ => &["low_shard", "current_shard", "high_shard"],
-            };
-            for (i, suffix) in shard_suffixes.iter().enumerate() {
-                let idx = current_idx + i;
-                let nested_name = format!("{}_{}", field_name_str, suffix);
-                account_metas.push(quote! {
-                    ::solzempic::ShankAccountMeta {
-                        index: #idx,
-                        name: #nested_name,
-                        is_signer: false,
-                        is_writable: #is_writable,
-                        is_program: false,
-                    }
-                });
+                let constraints_str = if constraints.is_empty() {
+                    String::new()
+                } else {
+                    format!(", {}", constraints.join(", "))
+                };
+
                 shank_attr_strings.push(format!(
                     "#[account({}{}, name=\"{}\")]",
-                    idx,
-                    if is_writable { ", writable" } else { "" },
-                    nested_name
+                    current_idx, constraints_str, field_name_str
                 ));
+
+                account_metas.push(quote! {
+                    ::solzempic::ShankAccountMeta {
+                        index: #current_idx,
+                        name: #field_name_str,
+                        is_signer: #is_signer,
+                        is_writable: #is_writable,
+                        is_program: #is_program,
+                    }
+                });
+                current_idx += 1;
             }
-            current_idx += expand_count;
-        } else {
-            let mut constraints = Vec::new();
-            if is_writable {
-                constraints.push("writable");
-            }
-            if is_signer {
-                constraints.push("signer");
-            }
-
-            let constraints_str = if constraints.is_empty() {
-                String::new()
-            } else {
-                format!(", {}", constraints.join(", "))
-            };
-
-            shank_attr_strings.push(format!(
-                "#[account({}{}, name=\"{}\")]",
-                current_idx, constraints_str, field_name_str
-            ));
-
-            account_metas.push(quote! {
-                ::solzempic::ShankAccountMeta {
-                    index: #current_idx,
-                    name: #field_name_str,
-                    is_signer: #is_signer,
-                    is_writable: #is_writable,
-                    is_program: #is_program,
-                }
-            });
-            current_idx += 1;
-        }
-
         } // close group_count else
     }
 
@@ -806,7 +807,9 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
         let field_ty = &f.ty;
         let field_vis = &f.vis;
         // Filter out #[group(N)] attributes so they don't appear in struct output
-        let field_attrs: Vec<_> = f.attrs.iter()
+        let field_attrs: Vec<_> = f
+            .attrs
+            .iter()
             .filter(|a| !a.path().is_ident("group"))
             .collect();
         quote! {

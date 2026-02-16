@@ -6,7 +6,7 @@
 
 use pinocchio::{error::ProgramError, AccountView};
 
-use super::traits::{HasAccountView, ValidatedAccount};
+use super::traits::{HasAccountView, HasAddress, ValidatedAccount};
 
 /// Validated signer account wrapper.
 ///
@@ -98,6 +98,13 @@ impl<'a> HasAccountView for Signer<'a> {
     #[inline]
     fn account_view(&self) -> &AccountView {
         self.info
+    }
+}
+
+impl<'a> HasAddress for Signer<'a> {
+    #[inline]
+    fn address(&self) -> &solana_address::Address {
+        self.info.address()
     }
 }
 
@@ -217,6 +224,13 @@ impl<'a> HasAccountView for MutSigner<'a> {
     }
 }
 
+impl<'a> HasAddress for MutSigner<'a> {
+    #[inline]
+    fn address(&self) -> &solana_address::Address {
+        self.info.address()
+    }
+}
+
 impl<'a> TryFrom<&'a AccountView> for MutSigner<'a> {
     type Error = ProgramError;
 
@@ -287,6 +301,13 @@ impl<'a> HasAccountView for Writable<'a> {
     }
 }
 
+impl<'a> HasAddress for Writable<'a> {
+    #[inline]
+    fn address(&self) -> &solana_address::Address {
+        self.info.address()
+    }
+}
+
 impl<'a> TryFrom<&'a AccountView> for Writable<'a> {
     type Error = ProgramError;
 
@@ -348,6 +369,13 @@ impl<'a> HasAccountView for ReadOnly<'a> {
     #[inline]
     fn account_view(&self) -> &AccountView {
         self.info
+    }
+}
+
+impl<'a> HasAddress for ReadOnly<'a> {
+    #[inline]
+    fn address(&self) -> &solana_address::Address {
+        self.info.address()
     }
 }
 
