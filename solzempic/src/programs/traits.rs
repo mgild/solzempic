@@ -65,6 +65,13 @@ impl HasAddress for Address {
     }
 }
 
+impl<T: HasAddress> HasAddress for &T {
+    #[inline]
+    fn address(&self) -> &Address {
+        (*self).address()
+    }
+}
+
 impl HasAccountView for AccountView {
     #[inline]
     fn account_view(&self) -> &AccountView {

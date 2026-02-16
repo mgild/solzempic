@@ -511,6 +511,13 @@ impl<'a> crate::AsAccountView for &TokenAccountRefMut<'a> {
     }
 }
 
+impl<'a> crate::HasAddress for TokenAccountRefMut<'a> {
+    #[inline]
+    fn address(&self) -> &Address {
+        self.info.address()
+    }
+}
+
 /// Builder for TokenAccountRefMut initialization to reduce duplication when initializing
 /// multiple token accounts with shared parameters.
 ///
