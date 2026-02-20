@@ -70,7 +70,7 @@ use super::traits::{HasAccountView, HasAddress, ValidatedAccount};
 /// - [`Payer`] - Type alias for signers that pay for transactions
 #[derive(Copy, Clone)]
 pub struct Signer<'a> {
-    info: &'a AccountView,
+    pub info: &'a AccountView,
 }
 
 impl<'a> ValidatedAccount<'a> for Signer<'a> {
@@ -190,7 +190,7 @@ pub type Payer<'a> = Signer<'a>;
 ///
 /// In Shank IDL generation, `MutSigner` produces `signer, writable` constraints.
 pub struct MutSigner<'a> {
-    info: &'a AccountView,
+    pub info: &'a AccountView,
 }
 
 impl<'a> ValidatedAccount<'a> for MutSigner<'a> {

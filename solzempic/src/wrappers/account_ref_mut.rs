@@ -699,6 +699,34 @@ impl<'a> PdaInitBuilder<'a> {
         )
     }
 
+    /// Initialize a PDA account with a custom space allocation.
+    ///
+    /// Like [`init`], but allows specifying a larger `space` than `P::AccountType::LEN`.
+    /// Use this for extendable account types (e.g., `PropAmmOrdersHeader`, `ActiveClmmPositionsHeader`)
+    /// where the account needs room for both the header and initial data slots.
+    #[inline]
+    pub fn init_with_space<P, F>(
+        &self,
+        account: &'a pinocchio::AccountView,
+        pda: &P,
+        space: usize,
+    ) -> Result<AccountRefMut<'a, P::AccountType, F>, pinocchio::error::ProgramError>
+    where
+        P: crate::traits::Pda,
+        P::AccountType: crate::traits::Initializable,
+        F: crate::Framework,
+        for<'b> P::Seeds<'b>: AsRef<[pinocchio::cpi::Seed<'b>]>,
+    {
+        let seeds = pda.seeds();
+        AccountRefMut::init_pda(
+            account,
+            self.payer,
+            self.system_program,
+            seeds.as_ref(),
+            space,
+        )
+    }
+
     /// Initialize a PDA account from a value that converts to a PDA.
     ///
     /// This accepts anything that implements `Into<P>`, allowing you to pass

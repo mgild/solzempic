@@ -229,19 +229,34 @@ impl<'a> Lut<'a> {
         addresses: &[&Address],
         signer_seeds: &[pinocchio::cpi::Seed<'b>],
     ) -> Result<(), ProgramError> {
+        // ALT program's limited_deserialize caps instruction data at 1232 bytes.
+        // Per-chunk max: (1232 - 12) / 32 = 38 addresses.
+        const MAX_ADDRESSES_PER_EXTEND: usize = 38;
+
+        for chunk in addresses.chunks(MAX_ADDRESSES_PER_EXTEND) {
+            self.extend_chunk(pda_builder, authority, chunk, signer_seeds)?;
+        }
+        Ok(())
+    }
+
+    fn extend_chunk<'b>(
+        &self,
+        pda_builder: &crate::PdaInitBuilder<'b>,
+        authority: &'b AccountView,
+        addresses: &[&Address],
+        signer_seeds: &[pinocchio::cpi::Seed<'b>],
+    ) -> Result<(), ProgramError> {
         let payer = pda_builder.payer();
         let system_program = pda_builder.system_program();
 
-        // ALT program ID is the expected owner of the LUT account
         let alt_program_id = &ADDRESS_LOOKUP_TABLE_PROGRAM_ID;
         // ExtendLookupTable instruction = 2
         // Data: [discriminator(4), num_addresses(8), addresses(32 * n)]
         let num_addresses = addresses.len() as u64;
         let data_len = 4 + 8 + 32 * addresses.len();
 
-        // Use stack buffer for small extensions, heap for larger
-        // Market init needs 33 addresses (28 accounts + 4 sysvars + braid program)
-        let mut data_buf = [0u8; 4 + 8 + 32 * 40]; // Max 40 addresses on stack
+        // Stack buffer fits max chunk (38 addresses): 4 + 8 + 32*38 = 1228
+        let mut data_buf = [0u8; 4 + 8 + 32 * 38];
         if data_len > data_buf.len() {
             return Err(ProgramError::InvalidArgument);
         }
