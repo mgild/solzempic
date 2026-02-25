@@ -92,8 +92,11 @@ pub fn emit_event<T: Event>(event: &T) {
         stack_buf[..8].copy_from_slice(&T::DISCRIMINATOR);
         stack_buf[8..total_len].copy_from_slice(event_bytes);
 
+        // sol_log_data expects an array of SolBytes {ptr, len} entries.
+        // A &[u8] fat pointer has the same layout as one SolBytes entry.
+        let fields: [&[u8]; 1] = [&stack_buf[..total_len]];
         unsafe {
-            sol_log_data(stack_buf.as_ptr(), total_len as u64);
+            sol_log_data(fields.as_ptr() as *const u8, 1u64);
         }
     } else {
         // Large events: use heap allocation
@@ -101,8 +104,9 @@ pub fn emit_event<T: Event>(event: &T) {
         data.extend_from_slice(&T::DISCRIMINATOR);
         data.extend_from_slice(event_bytes);
 
+        let fields: [&[u8]; 1] = [&data];
         unsafe {
-            sol_log_data(data.as_ptr(), data.len() as u64);
+            sol_log_data(fields.as_ptr() as *const u8, 1u64);
         }
     }
 }

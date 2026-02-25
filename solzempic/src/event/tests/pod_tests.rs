@@ -108,7 +108,7 @@ fn test_transfer_event_layout() {
 fn test_event_alignment() {
     // Verify proper alignment for different types
     assert_eq!(core::mem::align_of::<TestEvent>(), 8); // u64 alignment
-    assert_eq!(core::mem::align_of::<TransferEvent>(), 1); // Address is [u8; 32]
+    assert_eq!(core::mem::align_of::<TransferEvent>(), 8); // u64 field dominates alignment
 }
 
 #[test]
