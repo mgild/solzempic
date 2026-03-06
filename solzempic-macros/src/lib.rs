@@ -238,24 +238,41 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
     let vis = &input.vis;
     let attrs = &input.attrs;
 
-    // Parse the program ID from attribute - either a string literal or an identifier
-    let program_id_tokens: proc_macro2::TokenStream = if attr.is_empty() {
+    // Parse the attribute: "ProgramId" or "ProgramId", max_accounts = N
+    // Split on commas to separate program ID from optional key=value params
+    let attr_str = attr.to_string();
+    let mut parts = attr_str.splitn(2, ',');
+    let program_id_part = parts.next().unwrap().trim();
+    let rest = parts.next().unwrap_or("").trim();
+
+    // Parse program ID
+    let program_id_tokens: proc_macro2::TokenStream = if program_id_part.is_empty() {
         panic!("SolzempicEntrypoint requires a program ID, e.g. #[SolzempicEntrypoint(\"Your111...\")]");
+    } else if program_id_part.starts_with('"') && program_id_part.ends_with('"') {
+        // String literal: convert to pinocchio_pubkey::pubkey!() call
+        let pubkey_str = &program_id_part[1..program_id_part.len() - 1];
+        let pubkey_str_lit = syn::LitStr::new(pubkey_str, proc_macro2::Span::call_site());
+        quote! { ::pinocchio_pubkey::pubkey!(#pubkey_str_lit) }
     } else {
-        let attr_str = attr.to_string();
-        let trimmed = attr_str.trim();
-        if trimmed.starts_with('"') && trimmed.ends_with('"') {
-            // String literal: convert to pinocchio_pubkey::pubkey!() call
-            let pubkey_str = &trimmed[1..trimmed.len() - 1];
-            let pubkey_str_lit = syn::LitStr::new(pubkey_str, proc_macro2::Span::call_site());
-            quote! { ::pinocchio_pubkey::pubkey!(#pubkey_str_lit) }
-        } else {
-            // Identifier: use directly
-            let ident: syn::Ident = syn::parse(attr.clone())
-                .expect("SolzempicEntrypoint attribute must be a string literal or identifier");
-            quote! { #ident }
-        }
+        // Identifier: use directly
+        let ident: syn::Ident = syn::parse(attr.clone())
+            .expect("SolzempicEntrypoint attribute must be a string literal or identifier");
+        quote! { #ident }
     };
+
+    // Parse optional key=value parameters (e.g., max_accounts = 32)
+    let mut max_accounts: Option<usize> = None;
+    if !rest.is_empty() {
+        for param in rest.split(',') {
+            let param = param.trim();
+            if let Some(value_str) = param.strip_prefix("max_accounts").and_then(|s| s.trim().strip_prefix('=')) {
+                max_accounts = Some(value_str.trim().parse::<usize>()
+                    .expect("max_accounts must be a positive integer"));
+            } else if !param.is_empty() {
+                panic!("Unknown SolzempicEntrypoint parameter: {}", param);
+            }
+        }
+    }
 
     let variants = match &input.data {
         Data::Enum(data_enum) => &data_enum.variants,
@@ -391,6 +408,14 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         }
     });
 
+    let entrypoint_max_accounts: proc_macro2::TokenStream = match max_accounts {
+        Some(n) => {
+            let lit = proc_macro2::Literal::usize_unsuffixed(n);
+            quote! { , { #lit } }
+        }
+        None => quote! {},
+    };
+
     let expanded = quote! {
         /// Program ID
         pub const ID: ::solana_address::Address = ::solana_address::Address::new_from_array(#program_id_tokens);
@@ -483,7 +508,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         }
 
         #[cfg(not(feature = "no-entrypoint"))]
-        ::pinocchio::entrypoint!(process_instruction);
+        ::pinocchio::entrypoint!(process_instruction #entrypoint_max_accounts);
 
         /// Get all instruction metadata for IDL generation.
         /// Returns a static slice of InstructionMeta for each instruction.
