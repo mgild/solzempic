@@ -183,6 +183,19 @@ impl<'a> TokenAccountRefMut<'a> {
         if !address_eq(owner, &TOKEN_PROGRAM_ID) && !address_eq(owner, &TOKEN_2022_PROGRAM_ID) {
             return Err(ProgramError::IllegalOwner);
         }
+        Self::load_skip_owner(info)
+    }
+
+    /// Load a writable token account without checking the owner program.
+    ///
+    /// Use when the caller has already verified the account is owned by a
+    /// token program (e.g., after `init_ata` which checks owner).
+    ///
+    /// # Safety (logical)
+    ///
+    /// Caller must ensure the account is owned by TOKEN_PROGRAM_ID or TOKEN_2022_PROGRAM_ID.
+    #[inline]
+    pub fn load_skip_owner(info: &'a AccountView) -> Result<Self, ProgramError> {
         if !info.is_writable() {
             return Err(ProgramError::InvalidAccountData);
         }
@@ -208,7 +221,8 @@ impl<'a> TokenAccountRefMut<'a> {
     /// Get a reference to the parsed token account data.
     #[inline]
     pub fn get(&self) -> &TokenAccountData {
-        bytemuck::from_bytes(&self.data[..TokenAccountData::LEN])
+        // Safety: length >= LEN verified during load. TokenAccountData has alignment 1.
+        unsafe { &*(self.data.as_ptr() as *const TokenAccountData) }
     }
 
     /// Get a mutable reference to the parsed token account data.
@@ -219,7 +233,8 @@ impl<'a> TokenAccountRefMut<'a> {
     /// token program may cause inconsistencies. Use CPI for most operations.
     #[inline]
     pub fn get_mut(&mut self) -> &mut TokenAccountData {
-        bytemuck::from_bytes_mut(&mut self.data[..TokenAccountData::LEN])
+        // Safety: length >= LEN verified during load. TokenAccountData has alignment 1.
+        unsafe { &mut *(self.data.as_mut_ptr() as *mut TokenAccountData) }
     }
 
     /// Get the mint address this account holds tokens for.
@@ -659,6 +674,7 @@ impl<'a> TokenAccountInitBuilder<'a> {
         };
 
         TokenAccountRefMut::init_ata(ata, payer, owner, mint, self.system_program, token_program)?;
-        TokenAccountRefMut::load(ata)
+        // Skip redundant owner check — init_ata already verified/created as token account
+        TokenAccountRefMut::load_skip_owner(ata)
     }
 }

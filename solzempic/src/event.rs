@@ -39,9 +39,17 @@
 
 use bytemuck::Pod;
 
+/// A single data slice for the sol_log_data syscall.
+/// The syscall expects an array of these, NOT raw bytes.
+#[repr(C)]
+struct SolBytes {
+    addr: *const u8,
+    len: u64,
+}
+
 // Solana syscall for logging data (not directly exported by pinocchio)
 extern "C" {
-    fn sol_log_data(data: *const u8, data_len: u64);
+    fn sol_log_data(data: *const SolBytes, data_len: u64);
 }
 
 /// Trait for types that can be emitted as events.
@@ -82,32 +90,23 @@ pub trait Event: Pod {
 /// state transitions that off-chain systems need to observe.
 #[inline]
 pub fn emit_event<T: Event>(event: &T) {
-    // Get event bytes (zero-copy via bytemuck)
+    // Zero-copy: pass discriminator and event data as two separate slices
+    // to sol_log_data, avoiding any memcpy or buffer allocation.
+    let disc = T::DISCRIMINATOR;
     let event_bytes = bytemuck::bytes_of(event);
-    let total_len = 8 + event_bytes.len();
 
-    // Optimize for small events (< 256 bytes) using stack allocation
-    if total_len <= 256 {
-        let mut stack_buf = [0u8; 256];
-        stack_buf[..8].copy_from_slice(&T::DISCRIMINATOR);
-        stack_buf[8..total_len].copy_from_slice(event_bytes);
-
-        // sol_log_data expects an array of SolBytes {ptr, len} entries.
-        // A &[u8] fat pointer has the same layout as one SolBytes entry.
-        let fields: [&[u8]; 1] = [&stack_buf[..total_len]];
-        unsafe {
-            sol_log_data(fields.as_ptr() as *const u8, 1u64);
-        }
-    } else {
-        // Large events: use heap allocation
-        let mut data = alloc::vec::Vec::with_capacity(total_len);
-        data.extend_from_slice(&T::DISCRIMINATOR);
-        data.extend_from_slice(event_bytes);
-
-        let fields: [&[u8]; 1] = [&data];
-        unsafe {
-            sol_log_data(fields.as_ptr() as *const u8, 1u64);
-        }
+    let sol_bytes = [
+        SolBytes {
+            addr: disc.as_ptr(),
+            len: 8,
+        },
+        SolBytes {
+            addr: event_bytes.as_ptr(),
+            len: event_bytes.len() as u64,
+        },
+    ];
+    unsafe {
+        sol_log_data(sol_bytes.as_ptr(), 2);
     }
 }
 

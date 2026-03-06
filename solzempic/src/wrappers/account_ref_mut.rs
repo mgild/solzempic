@@ -234,7 +234,9 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
     #[inline]
     pub fn get(&self) -> &T {
         let data = unsafe { self.info.borrow_unchecked() };
-        bytemuck::from_bytes(&data[..T::LEN])
+        // Safety: length >= T::LEN verified during load/init.
+        // Account data is properly aligned on SBF.
+        unsafe { &*(data.as_ptr() as *const T) }
     }
 
     /// Get a mutable reference to the parsed account data.
@@ -258,7 +260,9 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
     #[inline]
     pub fn get_mut(&mut self) -> &mut T {
         let data = unsafe { self.info.borrow_unchecked_mut() };
-        bytemuck::from_bytes_mut(&mut data[..T::LEN])
+        // Safety: length >= T::LEN verified during load/init.
+        // Account data is properly aligned on SBF.
+        unsafe { &mut *(data.as_mut_ptr() as *mut T) }
     }
 
     /// Get the full account data slice.
@@ -395,7 +399,12 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
             // Write discriminator byte
             data[0] = T::DISCRIMINATOR;
         }
-        Self::load_unchecked(info)
+        // Skip load_unchecked — we just validated length and wrote the discriminator
+        Ok(Self {
+            info,
+            pda_bump: None,
+            _marker: PhantomData,
+        })
     }
 
     /// Initialize if uninitialized, otherwise just load.
@@ -434,16 +443,22 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
             return Err(crate::errors::account_not_writable());
         }
         if Self::is_uninit(info) {
-            {
-                let data = unsafe { info.borrow_unchecked_mut() };
-                if data.len() < T::LEN {
-                    return Err(crate::errors::invalid_account_data());
-                }
-                // Write discriminator byte
-                data[0] = T::DISCRIMINATOR;
+            let data = unsafe { info.borrow_unchecked_mut() };
+            if data.len() < T::LEN {
+                return Err(crate::errors::invalid_account_data());
             }
+            // Write discriminator byte
+            data[0] = T::DISCRIMINATOR;
+            // Skip load_unchecked — we just validated length and wrote the discriminator
+            Ok(Self {
+                info,
+                pda_bump: None,
+                _marker: PhantomData,
+            })
+        } else {
+            // Already initialized — still need to validate size + discriminator
+            Self::load_unchecked(info)
         }
-        Self::load_unchecked(info)
     }
 
     /// Create a PDA account and initialize it in one operation.
@@ -529,9 +544,12 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
             data[0] = T::DISCRIMINATOR;
         }
 
-        let mut account = Self::load_unchecked(info)?;
-        account.pda_bump = pda_bump;
-        Ok(account)
+        // Skip load_unchecked — CPI just created the account with the right size
+        Ok(Self {
+            info,
+            pda_bump,
+            _marker: PhantomData,
+        })
     }
 }
 
@@ -549,7 +567,7 @@ impl<'a, T: Loadable, F: Framework> AsAccountRef<'a, T, F> for AccountRefMut<'a,
     #[inline]
     fn get(&self) -> &T {
         let data = unsafe { self.info.borrow_unchecked() };
-        bytemuck::from_bytes(&data[..T::LEN])
+        unsafe { &*(data.as_ptr() as *const T) }
     }
 
     #[inline]

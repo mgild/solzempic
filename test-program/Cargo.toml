@@ -1,0 +1,22 @@
+[package]
+name = "solzempic-test-program"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[features]
+default = []
+no-entrypoint = []
+
+[dependencies]
+pinocchio = { version = "=0.10", features = ["cpi", "copy"] }
+pinocchio-pubkey = "0.3"
+solana-address = { version = "2.0", features = ["bytemuck", "syscalls", "curve25519"] }
+bytemuck = { version = "1.14", features = ["derive", "min_const_generics"] }
+solzempic = { path = "../solzempic" }
+solzempic-macros = { path = "../solzempic-macros" }
+
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ["cfg(target_os, values(\"solana\"))"] }

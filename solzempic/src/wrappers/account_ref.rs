@@ -68,8 +68,8 @@ use super::traits::AsAccountRef;
 pub struct AccountRef<'a, T: Loadable, F: Framework> {
     /// The underlying AccountView reference.
     pub info: &'a AccountView,
-    data: &'a [u8],
-    _marker: PhantomData<(T, F)>,
+    typed: &'a T,
+    _marker: PhantomData<F>,
 }
 
 impl<'a, T: Loadable, F: Framework> AccountRef<'a, T, F> {
@@ -132,9 +132,13 @@ impl<'a, T: Loadable, F: Framework> AccountRef<'a, T, F> {
             return Err(crate::errors::invalid_account_data());
         }
 
+        // Safety: We've verified length >= T::LEN and discriminator matches.
+        // Account data is always properly aligned on Solana.
+        let typed = unsafe { &*(data.as_ptr() as *const T) };
+
         Ok(Self {
             info,
-            data,
+            typed,
             _marker: PhantomData,
         })
     }
@@ -161,7 +165,7 @@ impl<'a, T: Loadable, F: Framework> AccountRef<'a, T, F> {
     /// ```
     #[inline]
     pub fn get(&self) -> &T {
-        bytemuck::from_bytes(&self.data[..T::LEN])
+        self.typed
     }
 
     /// Check if this account is a PDA derived from the given seeds.
@@ -214,7 +218,7 @@ impl<'a, T: Loadable, F: Framework> AsAccountRef<'a, T, F> for AccountRef<'a, T,
 
     #[inline]
     fn get(&self) -> &T {
-        bytemuck::from_bytes(&self.data[..T::LEN])
+        self.typed
     }
 
     #[inline]

@@ -54,7 +54,8 @@ pub trait Account: Pod {
         if !Self::check_data(data) {
             return Err(ProgramError::InvalidAccountData);
         }
-        Ok(bytemuck::from_bytes(&data[..Self::LEN]))
+        // Safety: length validated above, Pod type on SBF is safely castable
+        Ok(unsafe { &*(data.as_ptr() as *const Self) })
     }
 
     /// Load mutable account from raw data, validating discriminator.
@@ -66,19 +67,20 @@ pub trait Account: Pod {
         if !Self::check_data(data) {
             return Err(ProgramError::InvalidAccountData);
         }
-        Ok(bytemuck::from_bytes_mut(&mut data[..Self::LEN]))
+        // Safety: length validated above, Pod type on SBF is safely castable
+        Ok(unsafe { &mut *(data.as_mut_ptr() as *mut Self) })
     }
 
     /// Load account from raw data without discriminator check (unchecked).
     #[inline]
     fn load_unchecked(data: &[u8]) -> &Self {
-        bytemuck::from_bytes(&data[..Self::LEN])
+        unsafe { &*(data.as_ptr() as *const Self) }
     }
 
     /// Load mutable account from raw data without discriminator check (unchecked).
     #[inline]
     fn load_unchecked_mut(data: &mut [u8]) -> &mut Self {
-        bytemuck::from_bytes_mut(&mut data[..Self::LEN])
+        unsafe { &mut *(data.as_mut_ptr() as *mut Self) }
     }
 }
 

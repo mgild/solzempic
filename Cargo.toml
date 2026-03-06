@@ -1,5 +1,5 @@
 [workspace]
-members = ["solzempic", "solzempic-macros"]
+members = ["solzempic", "solzempic-macros", "test-program", "integration-tests"]
 resolver = "2"
 
 [workspace.package]

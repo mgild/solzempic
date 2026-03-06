@@ -248,10 +248,8 @@ pub fn create_pda_account<'a>(
 ) -> Result<(), ProgramError> {
     let lamports = rent_exempt_minimum(space);
 
-    // CreateAccount instruction
-    // Discriminator: 0
+    // CreateAccount instruction (discriminator 0 is already set by zero-init)
     let mut instruction_data = [0u8; 52];
-    instruction_data[0..4].copy_from_slice(&0u32.to_le_bytes()); // CreateAccount discriminator
     instruction_data[4..12].copy_from_slice(&lamports.to_le_bytes());
     instruction_data[12..20].copy_from_slice(&(space as u64).to_le_bytes());
     instruction_data[20..52].copy_from_slice(program_id.as_ref());
