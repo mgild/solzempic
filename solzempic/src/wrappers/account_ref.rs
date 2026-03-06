@@ -8,7 +8,7 @@ use core::marker::PhantomData;
 use pinocchio::{error::ProgramError, AccountView};
 use solana_address::{address_eq, Address};
 
-use crate::{check_discriminator, Framework, Loadable};
+use crate::{Framework, Loadable};
 
 use super::traits::AsAccountRef;
 
@@ -124,16 +124,11 @@ impl<'a, T: Loadable, F: Framework> AccountRef<'a, T, F> {
     pub fn load_unchecked(info: &'a AccountView) -> Result<Self, ProgramError> {
         let data = unsafe { info.borrow_unchecked() };
 
-        if data.len() < T::LEN {
+        // Combined length + discriminator check
+        if data.len() < T::LEN || unsafe { *data.get_unchecked(0) } != T::DISCRIMINATOR {
             return Err(crate::errors::invalid_account_data());
         }
 
-        if !check_discriminator(data, T::DISCRIMINATOR) {
-            return Err(crate::errors::invalid_account_data());
-        }
-
-        // Safety: We've verified length >= T::LEN and discriminator matches.
-        // Account data is always properly aligned on Solana.
         let typed = unsafe { &*(data.as_ptr() as *const T) };
 
         Ok(Self {

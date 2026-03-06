@@ -450,7 +450,7 @@ pub trait Instruction<'a>: InstructionParams + Sized {
     fn execute(&mut self, program_id: &Address, params: &Self::Params) -> ProgramResult;
 
     /// Process the instruction (parse params -> build context -> validate -> execute).
-    #[inline(never)]
+    #[inline]
     fn process(program_id: &Address, accounts: &'a [AccountView], data: &[u8]) -> ProgramResult {
         let params = parse_params::<Self::Params>(data)?;
         let mut ctx = Self::build(accounts, &params)?;

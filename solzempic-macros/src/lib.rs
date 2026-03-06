@@ -311,7 +311,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
     // Generate process match arms (direct discriminator to handler)
     let process_arms = variant_info.iter().map(|(name, disc, _)| {
         quote! {
-            #disc => <#name<'_> as ::solzempic::Instruction<'_>>::process(program_id, accounts, &data[1..]),
+            #disc => <#name<'_> as ::solzempic::Instruction<'_>>::process(program_id, accounts, unsafe { data.get_unchecked(1..) }),
         }
     });
 
@@ -451,9 +451,11 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
                 accounts: &[::pinocchio::AccountView],
                 data: &[u8],
             ) -> ::pinocchio::ProgramResult {
-                let discriminator = *data.first()
-                    .ok_or(::pinocchio::error::ProgramError::InvalidInstructionData)?;
-                match discriminator {
+                if data.is_empty() {
+                    return Err(::pinocchio::error::ProgramError::InvalidInstructionData);
+                }
+                // Safety: just checked data is non-empty
+                match unsafe { *data.get_unchecked(0) } {
                     #(#process_arms)*
                     _ => Err(::pinocchio::error::ProgramError::InvalidInstructionData),
                 }

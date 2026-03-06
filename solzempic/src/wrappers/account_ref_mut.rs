@@ -9,9 +9,7 @@ use core::marker::PhantomData;
 use pinocchio::{error::ProgramError, AccountView};
 use solana_address::{address_eq, Address};
 
-use crate::{
-    check_discriminator, create_pda_account, Framework, Initializable, Loadable, SYSTEM_PROGRAM_ID,
-};
+use crate::{create_pda_account, Framework, Initializable, Loadable};
 
 use super::traits::AsAccountRef;
 
@@ -189,11 +187,9 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
     pub fn load_unchecked(info: &'a AccountView) -> Result<Self, ProgramError> {
         let data = unsafe { info.borrow_unchecked() };
 
-        if data.len() < T::LEN {
-            return Err(crate::errors::invalid_account_data());
-        }
-
-        if !check_discriminator(data, T::DISCRIMINATOR) {
+        // Combined length + discriminator check (length implies non-empty,
+        // so the separate is_empty check in check_discriminator is redundant)
+        if data.len() < T::LEN || unsafe { *data.get_unchecked(0) } != T::DISCRIMINATOR {
             return Err(crate::errors::invalid_account_data());
         }
 
@@ -325,81 +321,26 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
         (self.info.address().as_ref() == expected.as_ref(), bump)
     }
 
-    /// Check if an account is uninitialized and can be initialized.
-    ///
-    /// An account is considered uninitialized if:
-    /// - It's owned by the System program (fresh account), OR
-    /// - It's owned by this program AND has a zero discriminator
-    ///
-    /// This is used internally by [`init`](Self::init) and [`init_if_needed`](Self::init_if_needed).
-    #[inline]
-    fn is_uninit(info: &AccountView) -> bool {
-        let owner = unsafe { info.owner() };
-        if address_eq(owner, &SYSTEM_PROGRAM_ID) {
-            return true;
-        }
-
-        if address_eq(owner, &F::PROGRAM_ID) {
-            let data = unsafe { info.borrow_unchecked() };
-            return data.is_empty() || data[0] == 0;
-        }
-
-        false
-    }
 }
 
 impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
     /// Initialize an uninitialized account and wrap it.
     ///
-    /// This method writes the type's discriminator to an uninitialized account,
-    /// then returns a wrapper for the initialized account. All other bytes
-    /// remain zeroed.
-    ///
-    /// # Preconditions
-    ///
-    /// - Account must be writable
-    /// - Account must be uninitialized (system-owned or zero discriminator)
-    /// - Account must already have sufficient space allocated
-    ///
-    /// # Arguments
-    ///
-    /// * `info` - The uninitialized account to initialize
-    ///
-    /// # Errors
-    ///
-    /// * [`ProgramError::InvalidAccountData`] - Account not writable or too small
-    /// * [`ProgramError::AccountAlreadyInitialized`] - Account already has data
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// // Account was created with sufficient space beforehand
-    /// let mut counter: AccountRefMut<Counter> = AccountRefMut::init(&accounts[0])?;
-    /// counter.get_mut().owner = *owner.key();
-    /// counter.get_mut().count = 0;
-    /// ```
-    ///
-    /// # See Also
-    ///
-    /// - [`init_pda`](Self::init_pda) - Create and initialize PDA in one call
-    /// - [`init_if_needed`](Self::init_if_needed) - Idempotent initialization
+    /// Discriminator byte 0 == uninitialized. Single borrow, no owner check
+    /// (runtime enforces write-ownership).
     #[inline]
     pub fn init(info: &'a AccountView) -> Result<Self, ProgramError> {
         if !info.is_writable() {
             return Err(crate::errors::account_not_writable());
         }
-        if !Self::is_uninit(info) {
+        let data = unsafe { info.borrow_unchecked_mut() };
+        if data.len() < T::LEN {
+            return Err(crate::errors::invalid_account_data());
+        }
+        if data[0] != 0 {
             return Err(crate::errors::account_already_initialized());
         }
-        {
-            let data = unsafe { info.borrow_unchecked_mut() };
-            if data.len() < T::LEN {
-                return Err(crate::errors::invalid_account_data());
-            }
-            // Write discriminator byte
-            data[0] = T::DISCRIMINATOR;
-        }
-        // Skip load_unchecked — we just validated length and wrote the discriminator
+        data[0] = T::DISCRIMINATOR;
         Ok(Self {
             info,
             pda_bump: None,
@@ -409,56 +350,26 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
 
     /// Initialize if uninitialized, otherwise just load.
     ///
-    /// This is an idempotent initialization method - it's safe to call multiple
-    /// times on the same account. If the account is already initialized, it
-    /// simply loads and returns it without modification.
-    ///
-    /// # Use Cases
-    ///
-    /// - Creating user accounts on first interaction
-    /// - Ensuring an account exists before use
-    /// - Defensive programming where initialization state is uncertain
-    ///
-    /// # Arguments
-    ///
-    /// * `info` - The account to initialize or load
-    ///
-    /// # Errors
-    ///
-    /// * [`ProgramError::InvalidAccountData`] - Account not writable or too small
-    /// * [`ProgramError::InvalidAccountData`] - Data too small or wrong discriminator (if already init)
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// // Safe to call even if user already has an account
-    /// let mut user: AccountRefMut<User> = AccountRefMut::init_if_needed(user_account)?;
-    /// if user.get().owner == [0u8; 32] {
-    ///     user.get_mut().owner = *owner.key();
-    /// }
-    /// ```
+    /// Idempotent — safe to call multiple times on the same account.
     #[inline]
     pub fn init_if_needed(info: &'a AccountView) -> Result<Self, ProgramError> {
         if !info.is_writable() {
             return Err(crate::errors::account_not_writable());
         }
-        if Self::is_uninit(info) {
-            let data = unsafe { info.borrow_unchecked_mut() };
-            if data.len() < T::LEN {
-                return Err(crate::errors::invalid_account_data());
-            }
-            // Write discriminator byte
-            data[0] = T::DISCRIMINATOR;
-            // Skip load_unchecked — we just validated length and wrote the discriminator
-            Ok(Self {
-                info,
-                pda_bump: None,
-                _marker: PhantomData,
-            })
-        } else {
-            // Already initialized — still need to validate size + discriminator
-            Self::load_unchecked(info)
+        let data = unsafe { info.borrow_unchecked_mut() };
+        if data.len() < T::LEN {
+            return Err(crate::errors::invalid_account_data());
         }
+        if data[0] == 0 {
+            data[0] = T::DISCRIMINATOR;
+        } else if data[0] != T::DISCRIMINATOR {
+            return Err(crate::errors::invalid_account_data());
+        }
+        Ok(Self {
+            info,
+            pda_bump: None,
+            _marker: PhantomData,
+        })
     }
 
     /// Create a PDA account and initialize it in one operation.
