@@ -184,11 +184,11 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
     /// * [`ProgramError::InvalidAccountData`] - Data too small or wrong discriminator
     #[inline]
     pub fn load_unchecked(info: &'a AccountView) -> Result<Self, ProgramError> {
-        let data = unsafe { info.borrow_unchecked() };
-
-        // Combined length + discriminator check (length implies non-empty,
-        // so the separate is_empty check in check_discriminator is redundant)
-        if data.len() < T::LEN || unsafe { *data.get_unchecked(0) } != T::DISCRIMINATOR {
+        // Use data_len() + data_ptr() separately instead of borrow_unchecked()
+        // which constructs a full slice. Saves the from_raw_parts overhead.
+        if info.data_len() < T::LEN
+            || unsafe { *info.data_ptr() } != T::DISCRIMINATOR
+        {
             return Err(crate::errors::invalid_account_data());
         }
 
@@ -228,10 +228,9 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
     /// ```
     #[inline]
     pub fn get(&self) -> &T {
-        let data = unsafe { self.info.borrow_unchecked() };
         // Safety: length >= T::LEN verified during load/init.
-        // Account data is properly aligned on SBF.
-        unsafe { &*(data.as_ptr() as *const T) }
+        // Use data_ptr() directly — avoids constructing a slice (skips data_len read).
+        unsafe { &*(self.info.data_ptr() as *const T) }
     }
 
     /// Get a mutable reference to the parsed account data.
@@ -254,10 +253,9 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
     /// There's no need for an explicit "save" or "commit" operation.
     #[inline]
     pub fn get_mut(&mut self) -> &mut T {
-        let data = unsafe { self.info.borrow_unchecked_mut() };
         // Safety: length >= T::LEN verified during load/init.
-        // Account data is properly aligned on SBF.
-        unsafe { &mut *(data.as_mut_ptr() as *mut T) }
+        // Use data_ptr() directly — avoids constructing a slice (skips data_len read).
+        unsafe { &mut *(self.info.data_ptr() as *mut T) }
     }
 
     /// Get the full account data slice.
@@ -468,8 +466,7 @@ impl<'a, T: Loadable, F: Framework> AsAccountRef<'a, T, F> for AccountRefMut<'a,
 
     #[inline]
     fn get(&self) -> &T {
-        let data = unsafe { self.info.borrow_unchecked() };
-        unsafe { &*(data.as_ptr() as *const T) }
+        unsafe { &*(self.info.data_ptr() as *const T) }
     }
 
     #[inline]

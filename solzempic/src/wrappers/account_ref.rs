@@ -122,14 +122,15 @@ impl<'a, T: Loadable, F: Framework> AccountRef<'a, T, F> {
     /// * [`ProgramError::InvalidAccountData`] - Data too small or wrong discriminator
     #[inline]
     pub fn load_unchecked(info: &'a AccountView) -> Result<Self, ProgramError> {
-        let data = unsafe { info.borrow_unchecked() };
-
-        // Combined length + discriminator check
-        if data.len() < T::LEN || unsafe { *data.get_unchecked(0) } != T::DISCRIMINATOR {
+        // Use data_len() + data_ptr() separately instead of borrow_unchecked()
+        // which constructs a full slice. Saves the from_raw_parts overhead.
+        if info.data_len() < T::LEN
+            || unsafe { *info.data_ptr() } != T::DISCRIMINATOR
+        {
             return Err(crate::errors::invalid_account_data());
         }
 
-        let typed = unsafe { &*(data.as_ptr() as *const T) };
+        let typed = unsafe { &*(info.data_ptr() as *const T) };
 
         Ok(Self {
             info,

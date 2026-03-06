@@ -308,10 +308,20 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         }
     });
 
-    // Generate process match arms (direct discriminator to handler)
+    // Generate process match arms — fully inlined dispatch that skips
+    // Instruction::process and parse_params, avoiding redundant slice/length ops.
     let process_arms = variant_info.iter().map(|(name, disc, _)| {
         quote! {
-            #disc => <#name<'_> as ::solzempic::Instruction<'_>>::process(program_id, accounts, unsafe { data.get_unchecked(1..) }),
+            #disc => {
+                let __param_size = core::mem::size_of::<<#name as ::solzempic::InstructionParams>::Params>();
+                if data.len() < 1 + __param_size {
+                    return Err(::pinocchio::error::ProgramError::InvalidInstructionData);
+                }
+                let params = unsafe { *(data.as_ptr().add(1) as *const <#name as ::solzempic::InstructionParams>::Params) };
+                let mut ctx = <#name<'_> as ::solzempic::Instruction<'_>>::build(accounts, &params)?;
+                ctx.validate(program_id, &params)?;
+                ctx.execute(program_id, &params)
+            },
         }
     });
 

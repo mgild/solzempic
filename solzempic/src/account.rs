@@ -147,11 +147,20 @@ pub fn transfer_lamports<'a>(
         return Ok(());
     }
 
-    // System program transfer instruction
-    // Discriminator: 2 (Transfer)
-    let mut instruction_data = [0u8; 12];
-    instruction_data[0..4].copy_from_slice(&2u32.to_le_bytes()); // Transfer discriminator
-    instruction_data[4..12].copy_from_slice(&amount.to_le_bytes());
+    // System program transfer instruction: discriminator 2u32 + amount u64
+    // Use direct struct layout instead of copy_from_slice for fewer instructions.
+    #[repr(C, packed)]
+    struct TransferData {
+        discriminator: u32,
+        amount: u64,
+    }
+    let ix_data = TransferData {
+        discriminator: 2,
+        amount,
+    };
+    let instruction_data = unsafe {
+        core::slice::from_raw_parts(&ix_data as *const TransferData as *const u8, 12)
+    };
 
     let account_metas = [
         InstructionAccount {
@@ -248,11 +257,24 @@ pub fn create_pda_account<'a>(
 ) -> Result<(), ProgramError> {
     let lamports = rent_exempt_minimum(space);
 
-    // CreateAccount instruction (discriminator 0 is already set by zero-init)
-    let mut instruction_data = [0u8; 52];
-    instruction_data[4..12].copy_from_slice(&lamports.to_le_bytes());
-    instruction_data[12..20].copy_from_slice(&(space as u64).to_le_bytes());
-    instruction_data[20..52].copy_from_slice(program_id.as_ref());
+    // CreateAccount instruction: discriminator 0u32 + lamports + space + owner
+    // Use direct struct layout instead of copy_from_slice for fewer instructions.
+    #[repr(C, packed)]
+    struct CreateAccountData {
+        discriminator: u32,
+        lamports: u64,
+        space: u64,
+        owner: Address,
+    }
+    let ix_data = CreateAccountData {
+        discriminator: 0,
+        lamports,
+        space: space as u64,
+        owner: *program_id,
+    };
+    let instruction_data = unsafe {
+        core::slice::from_raw_parts(&ix_data as *const CreateAccountData as *const u8, 52)
+    };
 
     let account_metas = [
         InstructionAccount {
