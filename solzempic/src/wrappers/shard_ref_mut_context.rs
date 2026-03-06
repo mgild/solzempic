@@ -155,7 +155,7 @@ impl<'a, T: Loadable, F: Framework> ShardRefMutContext<'a, T, F> {
     /// Get the low AccountRefMut reference.
     ///
     /// This provides access to the underlying `AccountRefMut` for operations like
-    /// `.address()`, `.data_mut()`, `.info`, `.reload()`, etc.
+    /// `.address()`, `.data_mut()`, `.info`, etc.
     #[inline]
     pub fn low_ref(&self) -> &AccountRefMut<'a, T, F> {
         &self.low
@@ -170,7 +170,7 @@ impl<'a, T: Loadable, F: Framework> ShardRefMutContext<'a, T, F> {
     /// Get the current AccountRefMut reference.
     ///
     /// This provides access to the underlying `AccountRefMut` for operations like
-    /// `.address()`, `.data_mut()`, `.info`, `.reload()`, etc.
+    /// `.address()`, `.data_mut()`, `.info`, etc.
     ///
     /// # Example
     ///
@@ -198,7 +198,7 @@ impl<'a, T: Loadable, F: Framework> ShardRefMutContext<'a, T, F> {
     /// Get the high AccountRefMut reference.
     ///
     /// This provides access to the underlying `AccountRefMut` for operations like
-    /// `.address()`, `.data_mut()`, `.info`, `.reload()`, etc.
+    /// `.address()`, `.data_mut()`, `.info`, etc.
     #[inline]
     pub fn high_ref(&self) -> &AccountRefMut<'a, T, F> {
         match &self.high_ref {

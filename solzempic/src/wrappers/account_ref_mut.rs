@@ -68,7 +68,7 @@ use super::traits::AsAccountRef;
 /// from `info` on demand via `borrow_unchecked_mut()`. This means:
 ///
 /// - Multiple `AccountRefMut` values can coexist in the same struct
-/// - No need to call `reload()` after CPI (data is always fresh)
+/// - Data is always fresh (re-borrowed on each access)
 /// - Context structs like `FillCtx` can freely hold several writable accounts
 ///
 /// # Performance
@@ -79,7 +79,6 @@ use super::traits::AsAccountRef;
 /// | `get()` / `get_mut()` | ~5 CUs (pointer cast) |
 /// | `init()` | ~100 CUs (validation + write discriminator) |
 /// | `init_pda()` | ~2000 CUs (includes System CPI) |
-/// | `reload()` | ~10 CUs (re-borrow) |
 ///
 /// # See Also
 ///
@@ -287,14 +286,6 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
     pub fn data_mut(&mut self) -> &mut [u8] {
         unsafe { self.info.borrow_unchecked_mut() }
     }
-
-    /// No-op kept for API compatibility.
-    ///
-    /// Previously needed to refresh a cached `&mut [u8]` after CPI.
-    /// Now that data is re-borrowed on demand from `info`, this is unnecessary.
-    /// Existing call sites can be left in place without harm.
-    #[inline]
-    pub fn reload(&mut self) {}
 
     /// Check if this account is a PDA derived from the given seeds.
     ///

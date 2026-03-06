@@ -93,7 +93,6 @@ pub fn emit_event<T: Event>(event: &T) {
     // Zero-copy: pass discriminator and event data as two separate slices
     // to sol_log_data, avoiding any memcpy or buffer allocation.
     let disc = T::DISCRIMINATOR;
-    let event_bytes = bytemuck::bytes_of(event);
 
     let sol_bytes = [
         SolBytes {
@@ -101,8 +100,8 @@ pub fn emit_event<T: Event>(event: &T) {
             len: 8,
         },
         SolBytes {
-            addr: event_bytes.as_ptr(),
-            len: event_bytes.len() as u64,
+            addr: event as *const T as *const u8,
+            len: core::mem::size_of::<T>() as u64,
         },
     ];
     unsafe {
