@@ -279,7 +279,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         _ => panic!("SolzempicEntrypoint can only be applied to enums"),
     };
 
-    // Collect variant info (name, discriminator, and accounts)
+    // Collect variant info (name, discriminator, accounts, and execute_only flag)
     let variant_info: Vec<_> = variants
         .iter()
         .map(|variant| {
@@ -290,7 +290,8 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
                 .expect("SolzempicEntrypoint requires explicit discriminant values");
             let disc_expr = &discriminant.1;
             let accounts = parse_variant_accounts(&variant.attrs);
-            (variant_name, disc_expr, accounts)
+            let is_execute_only = variant.attrs.iter().any(|a| a.path().is_ident("execute_only"));
+            (variant_name, disc_expr, accounts, is_execute_only)
         })
         .collect();
 
@@ -314,36 +315,58 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         .collect();
 
     // Generate TryFrom<u8> match arms
-    let try_from_arms = variant_info.iter().map(|(name, disc, _)| {
+    let try_from_arms = variant_info.iter().map(|(name, disc, _, _)| {
         quote! { #disc => Ok(#enum_name::#name), }
     });
 
     // Generate dispatch match arms (for backward compat)
-    let dispatch_arms = variant_info.iter().map(|(name, _, _)| {
-        quote! {
-            #enum_name::#name => <#name<'_> as ::solzempic::Instruction<'_>>::process(program_id, accounts, data),
+    let dispatch_arms = variant_info.iter().map(|(name, _, _, is_execute_only)| {
+        if *is_execute_only {
+            quote! {
+                #enum_name::#name => {
+                    let params = ::solzempic::parse_params::<<#name<'_> as ::solzempic::InstructionParams>::Params>(data)?;
+                    <#name<'_> as ::solzempic::InstructionRaw>::execute_raw(program_id, accounts, &params)
+                },
+            }
+        } else {
+            quote! {
+                #enum_name::#name => <#name<'_> as ::solzempic::Instruction<'_>>::process(program_id, accounts, data),
+            }
         }
     });
 
     // Generate process match arms — fully inlined dispatch that skips
     // Instruction::process and parse_params, avoiding redundant slice/length ops.
-    let process_arms = variant_info.iter().map(|(name, disc, _)| {
-        quote! {
-            #disc => {
-                let __param_size = core::mem::size_of::<<#name as ::solzempic::InstructionParams>::Params>();
-                if data.len() < 1 + __param_size {
-                    return Err(::pinocchio::error::ProgramError::InvalidInstructionData);
-                }
-                let params = unsafe { *(data.as_ptr().add(1) as *const <#name as ::solzempic::InstructionParams>::Params) };
-                let mut ctx = <#name<'_> as ::solzempic::Instruction<'_>>::build(accounts, &params)?;
-                ctx.validate(program_id, &params)?;
-                ctx.execute(program_id, &params)
-            },
+    let process_arms = variant_info.iter().map(|(name, disc, _, is_execute_only)| {
+        if *is_execute_only {
+            quote! {
+                #disc => {
+                    let __param_size = core::mem::size_of::<<#name as ::solzempic::InstructionParams>::Params>();
+                    if data.len() < 1 + __param_size {
+                        return Err(::pinocchio::error::ProgramError::InvalidInstructionData);
+                    }
+                    let params = unsafe { *(data.as_ptr().add(1) as *const <#name as ::solzempic::InstructionParams>::Params) };
+                    <#name<'_> as ::solzempic::InstructionRaw>::execute_raw(program_id, accounts, &params)
+                },
+            }
+        } else {
+            quote! {
+                #disc => {
+                    let __param_size = core::mem::size_of::<<#name as ::solzempic::InstructionParams>::Params>();
+                    if data.len() < 1 + __param_size {
+                        return Err(::pinocchio::error::ProgramError::InvalidInstructionData);
+                    }
+                    let params = unsafe { *(data.as_ptr().add(1) as *const <#name as ::solzempic::InstructionParams>::Params) };
+                    let mut ctx = <#name<'_> as ::solzempic::Instruction<'_>>::build(accounts, &params)?;
+                    ctx.validate(program_id, &params)?;
+                    ctx.execute(program_id, &params)
+                },
+            }
         }
     });
 
     // Generate IDL metadata entries
-    let idl_entries = variant_info.iter().map(|(name, disc, _)| {
+    let idl_entries = variant_info.iter().map(|(name, disc, _, _)| {
         quote! {
             ::solzempic::InstructionMeta {
                 name: #name::IDL_NAME,
@@ -355,7 +378,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
     });
 
     // Generate variant definitions for the enum
-    let variant_defs = variant_info.iter().map(|(name, disc, _accounts)| {
+    let variant_defs = variant_info.iter().map(|(name, disc, _accounts, _)| {
         quote! {
             #name = #disc
         }
@@ -372,7 +395,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
 
     // Generate Shank-compatible IDL instruction metadata for each variant
     // This replaces what ShankInstruction derive would generate
-    let shank_instruction_metas = variant_info.iter().map(|(name, disc, accounts)| {
+    let shank_instruction_metas = variant_info.iter().map(|(name, disc, accounts, _)| {
         let name_str = name.to_string();
         // Convert PascalCase to snake_case for module name
         let mod_name_str = to_snake_case(&name_str);
@@ -695,6 +718,72 @@ pub fn instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         impl<'a> ::solzempic::Instruction<'a> for #struct_name<'a> {
+            #(#methods)*
+        }
+
+        impl #struct_name<'_> {
+            /// Instruction name for IDL.
+            pub const IDL_NAME: &'static str = #struct_name_str;
+
+            /// Get params field metadata for IDL generation.
+            pub const IDL_PARAMS: &'static [::solzempic::ParamField] = <#params_type as ::solzempic::ParamsMeta>::FIELDS;
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+/// Attribute macro for single-function instruction impl blocks.
+///
+/// Generates `InstructionParams` and `InstructionRaw` trait implementations,
+/// bypassing the three-phase build/validate/execute pattern. The impl block
+/// should contain a single `execute_raw` method.
+///
+/// Use with `#[execute_only]` on the enum variant in `SolzempicEntrypoint`.
+///
+/// # Example
+///
+/// ```ignore
+/// #[instruction_raw(MyParams)]
+/// impl MyInstruction<'_> {
+///     fn execute_raw(program_id: &Address, accounts: &[AccountView], params: &MyParams) -> ProgramResult {
+///         // All logic here — no context struct constructed
+///         Ok(())
+///     }
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn instruction_raw(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let params_type: syn::Path = syn::parse(attr)
+        .expect("instruction_raw macro requires params type, e.g. #[instruction_raw(MyParams)]");
+    let input = parse_macro_input!(item as ItemImpl);
+
+    let struct_type = &input.self_ty;
+    let struct_name = match struct_type.as_ref() {
+        syn::Type::Path(type_path) => &type_path.path.segments.last().unwrap().ident,
+        _ => panic!("instruction_raw macro requires a struct type"),
+    };
+
+    let methods: Vec<_> = input
+        .items
+        .iter()
+        .filter_map(|item| {
+            if let ImplItem::Fn(method) = item {
+                Some(method)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let struct_name_str = struct_name.to_string();
+
+    let expanded = quote! {
+        impl ::solzempic::InstructionParams for #struct_name<'_> {
+            type Params = #params_type;
+        }
+
+        impl ::solzempic::InstructionRaw for #struct_name<'_> {
             #(#methods)*
         }
 

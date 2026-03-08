@@ -223,7 +223,7 @@ pub use event::{emit_event, Event, EventFieldMeta, EventIdlMeta, EventMeta};
 
 // Re-export derive macros (Account derive renamed to avoid conflict with Account trait)
 pub use solzempic_macros::{
-    account, event, instruction, params, Account as AccountDerive, SolzempicEntrypoint,
+    account, event, instruction, instruction_raw, params, Account as AccountDerive, SolzempicEntrypoint,
 };
 
 /// Define an AccountType enum with automatic discriminator values.
@@ -457,6 +457,18 @@ pub trait Instruction<'a>: InstructionParams + Sized {
         ctx.validate(program_id, &params)?;
         ctx.execute(program_id, &params)
     }
+}
+
+/// Single-function instruction that bypasses the three-phase build/validate/execute pattern.
+///
+/// Use `#[instruction_raw(ParamsType)]` on an impl block with a single `execute_raw` method.
+/// Mark the corresponding enum variant with `#[execute_only]` in `SolzempicEntrypoint`.
+///
+/// This avoids constructing a context struct on the stack, which can save compute units
+/// for hot-path instructions where every CU matters.
+pub trait InstructionRaw: InstructionParams {
+    /// Execute the instruction directly from raw accounts and parameters.
+    fn execute_raw(program_id: &Address, accounts: &[AccountView], params: &Self::Params) -> ProgramResult;
 }
 
 /// Parse instruction parameters from raw bytes using zero-copy.
