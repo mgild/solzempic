@@ -393,6 +393,10 @@ impl AsAccountView for &AccountView {
 pub trait InstructionParams {
     /// The parameter type for this instruction (must be `Copy` for zero-copy parsing).
     type Params: Copy;
+
+    /// Minimum number of accounts required for this instruction.
+    /// Override via `#[instruction(Params, accounts = N)]`. Default 0 skips the check.
+    const REQUIRED_ACCOUNTS: usize = 0;
 }
 
 /// The Instruction trait defines the three-phase instruction processing pattern.

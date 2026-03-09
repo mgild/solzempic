@@ -187,6 +187,39 @@ fn event_discriminator(name: &str) -> [u8; 8] {
 /// - Applied to a non-enum type
 /// - No program ID provided in attribute
 /// - Variant lacks explicit discriminant value
+/// Parse instruction attribute: `(ParamsType)` or `(ParamsType, accounts = N)`.
+///
+/// Returns (params_type_path, optional_num_accounts).
+fn parse_instruction_attr(attr: TokenStream) -> (syn::Path, Option<usize>) {
+    let attr_str = attr.to_string();
+
+    // Check for comma-separated parts: "ParamsType , accounts = N"
+    if let Some(comma_pos) = attr_str.find(',') {
+        let params_part = attr_str[..comma_pos].trim();
+        let rest = attr_str[comma_pos + 1..].trim();
+
+        let params_type: syn::Path = syn::parse_str(params_part)
+            .expect("instruction macro requires params type, e.g. #[instruction(MyParams, accounts = 30)]");
+
+        let mut num_accounts: Option<usize> = None;
+        for param in rest.split(',') {
+            let param = param.trim();
+            if let Some(value_str) = param.strip_prefix("accounts").and_then(|s| s.trim().strip_prefix('=')) {
+                num_accounts = Some(value_str.trim().parse::<usize>()
+                    .expect("accounts must be a positive integer"));
+            } else if !param.is_empty() {
+                panic!("Unknown instruction parameter: '{}'. Expected: accounts = N", param);
+            }
+        }
+
+        (params_type, num_accounts)
+    } else {
+        let params_type: syn::Path = syn::parse(attr)
+            .expect("instruction macro requires params type, e.g. #[instruction(MyParams, accounts = 30)]");
+        (params_type, None)
+    }
+}
+
 /// Parse account specs from #[accounts(...)] attribute on enum variant.
 /// Format: #[accounts(name: constraint, name2: constraint2, ...)]
 /// Constraints: mut (writable), signer, mut_signer (both), program, or empty (readonly)
@@ -337,7 +370,19 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
 
     // Generate process match arms — fully inlined dispatch that skips
     // Instruction::process and parse_params, avoiding redundant slice/length ops.
+    // When REQUIRED_ACCOUNTS is defined, auto-checks accounts.len() before dispatch.
     let process_arms = variant_info.iter().map(|(name, disc, _, is_execute_only)| {
+        // Account length check — uses REQUIRED_ACCOUNTS from InstructionParams trait.
+        // When REQUIRED_ACCOUNTS is 0 (default), the compiler eliminates this branch entirely.
+        let accounts_check = quote! {
+            {
+                const __N: usize = <#name<'_> as ::solzempic::InstructionParams>::REQUIRED_ACCOUNTS;
+                if __N > 0 && accounts.len() < __N {
+                    return Err(::pinocchio::error::ProgramError::NotEnoughAccountKeys);
+                }
+            }
+        };
+
         if *is_execute_only {
             quote! {
                 #disc => {
@@ -345,6 +390,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
                     if data.len() < 1 + __param_size {
                         return Err(::pinocchio::error::ProgramError::InvalidInstructionData);
                     }
+                    #accounts_check
                     let params = unsafe { *(data.as_ptr().add(1) as *const <#name as ::solzempic::InstructionParams>::Params) };
                     <#name<'_> as ::solzempic::InstructionRaw>::execute_raw(program_id, accounts, &params)
                 },
@@ -356,6 +402,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
                     if data.len() < 1 + __param_size {
                         return Err(::pinocchio::error::ProgramError::InvalidInstructionData);
                     }
+                    #accounts_check
                     let params = unsafe { *(data.as_ptr().add(1) as *const <#name as ::solzempic::InstructionParams>::Params) };
                     let mut ctx = <#name<'_> as ::solzempic::Instruction<'_>>::build(accounts, &params)?;
                     ctx.validate(program_id, &params)?;
@@ -684,8 +731,7 @@ pub fn instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 
     // Otherwise treat as impl block
-    let params_type: syn::Path = syn::parse(attr)
-        .expect("instruction macro on impl requires params type, e.g. #[instruction(MyParams)]");
+    let (params_type, num_accounts) = parse_instruction_attr(attr);
     let input = parse_macro_input!(item as ItemImpl);
 
     // Extract the struct name from the impl
@@ -712,9 +758,14 @@ pub fn instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let struct_name_str = struct_name.to_string();
 
+    let required_accounts_impl = num_accounts.map(|n| {
+        quote! { const REQUIRED_ACCOUNTS: usize = #n; }
+    });
+
     let expanded = quote! {
         impl ::solzempic::InstructionParams for #struct_name<'_> {
             type Params = #params_type;
+            #required_accounts_impl
         }
 
         impl<'a> ::solzempic::Instruction<'a> for #struct_name<'a> {
@@ -754,8 +805,7 @@ pub fn instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn instruction_raw(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let params_type: syn::Path = syn::parse(attr)
-        .expect("instruction_raw macro requires params type, e.g. #[instruction_raw(MyParams)]");
+    let (params_type, num_accounts) = parse_instruction_attr(attr);
     let input = parse_macro_input!(item as ItemImpl);
 
     let struct_type = &input.self_ty;
@@ -778,9 +828,14 @@ pub fn instruction_raw(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let struct_name_str = struct_name.to_string();
 
+    let required_accounts_impl = num_accounts.map(|n| {
+        quote! { const REQUIRED_ACCOUNTS: usize = #n; }
+    });
+
     let expanded = quote! {
         impl ::solzempic::InstructionParams for #struct_name<'_> {
             type Params = #params_type;
+            #required_accounts_impl
         }
 
         impl ::solzempic::InstructionRaw for #struct_name<'_> {
