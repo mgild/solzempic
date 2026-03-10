@@ -80,8 +80,15 @@ export class EventParser {
           data: decoded,
         });
       } catch (err) {
-        // Skip malformed logs
-        console.warn('Failed to parse event log:', err);
+        // Malformed event payloads are expected in mixed log streams.
+        // Keep unknown parser faults visible, but suppress noisy bounds errors.
+        const msg = err instanceof Error ? err.message : String(err);
+        const isBoundsError =
+          err instanceof RangeError ||
+          /outside buffer bounds|out of range/i.test(msg);
+        if (!isBoundsError) {
+          console.warn('Failed to parse event log:', err);
+        }
       }
     }
 

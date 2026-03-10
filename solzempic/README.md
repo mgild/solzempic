@@ -102,7 +102,7 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 solzempic = { version = "0.1" }
-pinocchio = { version = "0.7" }
+pinocchio = { version = "=0.10", features = ["cpi", "copy"] }
 bytemuck = { version = "1.14", features = ["derive"] }
 ```
 
@@ -1040,7 +1040,7 @@ Contributions are welcome! Please:
 
 ## License
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
+Licensed under the MIT License. See [LICENSE](../LICENSE) for details.
 
 ## Acknowledgments
 
