@@ -44,14 +44,14 @@ describe('Integration Tests', () => {
       const parser = createEventParser(mockIdl);
 
       // Create TransferEvent
-      const transferEvent = Buffer.alloc(72);
+      const transferEvent = Buffer.alloc(80);
       Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]).copy(transferEvent, 0);
-      transferEvent.writeBigUInt64LE(BigInt(1000), 64);
+      transferEvent.writeBigUInt64LE(BigInt(1000), 72);
 
       // Create InitializeEvent
-      const initEvent = Buffer.alloc(40);
+      const initEvent = Buffer.alloc(48);
       Buffer.from([10, 20, 30, 40, 50, 60, 70, 80]).copy(initEvent, 0);
-      initEvent.writeBigUInt64LE(BigInt(1000000), 32);
+      initEvent.writeBigUInt64LE(BigInt(1000000), 40);
 
       const logs = [
         'Program invoke: MyProgram',
@@ -73,7 +73,7 @@ describe('Integration Tests', () => {
     test('handles mixed valid and invalid logs', () => {
       const parser = createEventParser(mockIdl);
 
-      const validEvent = Buffer.alloc(72);
+      const validEvent = Buffer.alloc(80);
       Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]).copy(validEvent, 0);
 
       const invalidData = Buffer.from([99, 99, 99]); // Unknown discriminator
@@ -95,10 +95,10 @@ describe('Integration Tests', () => {
     test('filters events by name correctly', () => {
       const parser = createEventParser(mockIdl);
 
-      const transferEvent = Buffer.alloc(72);
+      const transferEvent = Buffer.alloc(80);
       Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]).copy(transferEvent, 0);
 
-      const initEvent = Buffer.alloc(40);
+      const initEvent = Buffer.alloc(48);
       Buffer.from([10, 20, 30, 40, 50, 60, 70, 80]).copy(initEvent, 0);
 
       const logs = [
@@ -158,9 +158,9 @@ describe('Integration Tests', () => {
       // Simulate 100 events in a single transaction
       const logs: string[] = [];
       for (let i = 0; i < 100; i++) {
-        const event = Buffer.alloc(72);
+        const event = Buffer.alloc(80);
         Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]).copy(event, 0);
-        event.writeBigUInt64LE(BigInt(i), 64);
+        event.writeBigUInt64LE(BigInt(i), 72);
         logs.push(`Program data: ${event.toString('base64')}`);
       }
 
@@ -176,7 +176,7 @@ describe('Integration Tests', () => {
     test('handles events with all zeros', () => {
       const parser = createEventParser(mockIdl);
 
-      const event = Buffer.alloc(72);
+      const event = Buffer.alloc(80);
       Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]).copy(event, 0);
       // Rest is zeros
 
@@ -190,9 +190,9 @@ describe('Integration Tests', () => {
     test('handles events with maximum values', () => {
       const parser = createEventParser(mockIdl);
 
-      const event = Buffer.alloc(72);
+      const event = Buffer.alloc(80);
       Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]).copy(event, 0);
-      event.writeBigUInt64LE(BigInt('18446744073709551615'), 64); // Max u64
+      event.writeBigUInt64LE(BigInt('18446744073709551615'), 72); // Max u64
 
       const logs = [`Program data: ${event.toString('base64')}`];
       const events = parser.parseLogs(logs);
@@ -206,9 +206,9 @@ describe('Integration Tests', () => {
     test('continues parsing after encountering bad event', () => {
       const parser = createEventParser(mockIdl);
 
-      const goodEvent = Buffer.alloc(72);
+      const goodEvent = Buffer.alloc(80);
       Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]).copy(goodEvent, 0);
-      goodEvent.writeBigUInt64LE(BigInt(100), 64);
+      goodEvent.writeBigUInt64LE(BigInt(100), 72);
 
       const badEvent = Buffer.alloc(10); // Too short
       Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]).copy(badEvent, 0);
@@ -252,7 +252,7 @@ describe('Integration Tests', () => {
     test('discriminator lookup is O(1)', () => {
       const parser = createEventParser(mockIdl);
 
-      const event = Buffer.alloc(72);
+      const event = Buffer.alloc(80);
       Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]).copy(event, 0);
 
       const logs = [`Program data: ${event.toString('base64')}`];
@@ -260,7 +260,7 @@ describe('Integration Tests', () => {
       // First parse
       const start1 = Date.now();
       parser.parseLogs(logs);
-      const time1 = Date.now() - start1;
+      const time1 = Math.max(Date.now() - start1, 1);
 
       // Repeat 1000 times - should be similar time due to O(1) lookup
       const start2 = Date.now();

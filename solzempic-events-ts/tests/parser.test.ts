@@ -60,7 +60,7 @@ describe('EventParser', () => {
       const parser = new EventParser(mockIdl);
 
       // Create event data: discriminator + event struct
-      const eventData = Buffer.alloc(72); // 8 + 32 + 32
+      const eventData = Buffer.alloc(80); // 8 + 32 + 32 + 8
       eventData.writeUInt8(1, 0); // discriminator[0]
       eventData.writeUInt8(2, 1); // discriminator[1]
       eventData.writeUInt8(3, 2); // discriminator[2]
@@ -71,7 +71,7 @@ describe('EventParser', () => {
       eventData.writeUInt8(8, 7); // discriminator[7]
 
       // Write pubkeys and amount (all zeros for simplicity)
-      eventData.writeBigUInt64LE(BigInt(1000), 64);
+      eventData.writeBigUInt64LE(BigInt(1000), 72);
 
       const base64Data = eventData.toString('base64');
       const logs = [`Program data: ${base64Data}`];
@@ -98,7 +98,7 @@ describe('EventParser', () => {
       const parser = new EventParser(mockIdl);
 
       // Create event with unknown discriminator
-      const eventData = Buffer.alloc(72);
+      const eventData = Buffer.alloc(80);
       eventData.writeUInt8(99, 0); // Unknown discriminator
 
       const base64Data = eventData.toString('base64');
@@ -112,13 +112,13 @@ describe('EventParser', () => {
       const parser = new EventParser(mockIdl);
 
       // Create two events
-      const event1 = Buffer.alloc(72);
+      const event1 = Buffer.alloc(80);
       Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]).copy(event1, 0);
-      event1.writeBigUInt64LE(BigInt(100), 64);
+      event1.writeBigUInt64LE(BigInt(100), 72);
 
-      const event2 = Buffer.alloc(80);
+      const event2 = Buffer.alloc(88);
       Buffer.from([10, 20, 30, 40, 50, 60, 70, 80]).copy(event2, 0);
-      event2.writeBigUInt64LE(BigInt(200), 72);
+      event2.writeBigUInt64LE(BigInt(200), 80);
 
       const logs = [
         `Program data: ${event1.toString('base64')}`,
@@ -137,10 +137,10 @@ describe('EventParser', () => {
     test('filters events by name', () => {
       const parser = new EventParser(mockIdl);
 
-      const event1 = Buffer.alloc(72);
+      const event1 = Buffer.alloc(80);
       Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]).copy(event1, 0);
 
-      const event2 = Buffer.alloc(80);
+      const event2 = Buffer.alloc(88);
       Buffer.from([10, 20, 30, 40, 50, 60, 70, 80]).copy(event2, 0);
 
       const logs = [
@@ -180,7 +180,7 @@ describe('EventParser', () => {
       const parser = new EventParser(mockIdl);
 
       // Full 8-byte discriminator match
-      const eventData = Buffer.alloc(72);
+      const eventData = Buffer.alloc(80);
       Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]).copy(eventData, 0);
 
       const logs = [`Program data: ${eventData.toString('base64')}`];
@@ -194,7 +194,7 @@ describe('EventParser', () => {
       const parser = new EventParser(mockIdl);
 
       // Discriminator that matches first byte but not others
-      const eventData = Buffer.alloc(72);
+      const eventData = Buffer.alloc(80);
       Buffer.from([1, 0, 0, 0, 0, 0, 0, 0]).copy(eventData, 0);
 
       const logs = [`Program data: ${eventData.toString('base64')}`];

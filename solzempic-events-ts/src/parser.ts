@@ -117,7 +117,7 @@ export class EventParser {
       ...event,
       signature,
       slot: tx.slot,
-      blockTime: tx.blockTime,
+      blockTime: tx.blockTime ?? null,
     }));
   }
 

@@ -187,6 +187,7 @@ fn event_discriminator(name: &str) -> [u8; 8] {
 /// - Applied to a non-enum type
 /// - No program ID provided in attribute
 /// - Variant lacks explicit discriminant value
+///
 /// Parse instruction attribute: `(ParamsType)` or `(ParamsType, accounts = N)`.
 ///
 /// Returns (params_type_path, optional_num_accounts).
