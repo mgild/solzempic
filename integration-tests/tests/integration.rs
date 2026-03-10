@@ -4,16 +4,16 @@ use solana_sdk::{
     pubkey::Pubkey,
     signature::Keypair,
     signer::Signer,
-    system_instruction,
     transaction::Transaction,
 };
+use solana_system_interface::{instruction as system_instruction, program as system_program};
 
 const PROGRAM_ID: Pubkey = solana_sdk::pubkey!("SoLzeMPic1111111111111111111111111111111111");
 
 fn setup() -> (LiteSVM, Keypair) {
     let mut svm = LiteSVM::new();
     let program_bytes = include_bytes!("../../target/deploy/solzempic_test_program.so");
-    svm.add_program(PROGRAM_ID, program_bytes);
+    svm.add_program(PROGRAM_ID, program_bytes).unwrap();
     let payer = Keypair::new();
     svm.airdrop(&payer.pubkey(), 10_000_000_000).unwrap();
     (svm, payer)
@@ -51,9 +51,9 @@ fn build_init_counter_ix(payer: &Pubkey, counter: &Pubkey, initial_count: u64) -
     Instruction {
         program_id: PROGRAM_ID,
         accounts: vec![
-            AccountMeta::new(*payer, true),    // payer/signer
-            AccountMeta::new(*counter, false), // counter account
-            AccountMeta::new_readonly(solana_sdk::system_program::ID, false), // system program
+            AccountMeta::new(*payer, true),                       // payer/signer
+            AccountMeta::new(*counter, false),                    // counter account
+            AccountMeta::new_readonly(system_program::ID, false), // system program
         ],
         data,
     }
@@ -80,9 +80,9 @@ fn build_transfer_sol_ix(from: &Pubkey, to: &Pubkey, amount: u64) -> Instruction
     Instruction {
         program_id: PROGRAM_ID,
         accounts: vec![
-            AccountMeta::new(*from, true), // from/signer
-            AccountMeta::new(*to, false),  // to
-            AccountMeta::new_readonly(solana_sdk::system_program::ID, false), // system program
+            AccountMeta::new(*from, true),                        // from/signer
+            AccountMeta::new(*to, false),                         // to
+            AccountMeta::new_readonly(system_program::ID, false), // system program
         ],
         data,
     }
