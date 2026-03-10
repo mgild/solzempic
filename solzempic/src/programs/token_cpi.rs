@@ -344,8 +344,8 @@ pub fn mint_to<'a>(
 /// Initialize a new mint account using InitializeMint2 (no rent sysvar required)
 /// Account must already be allocated with MINT_SIZE bytes and owned by token program
 #[inline]
-pub fn initialize_mint<'a>(
-    mint: &'a AccountView,
+pub fn initialize_mint(
+    mint: &AccountView,
     mint_authority: &Address,
     freeze_authority: Option<&Address>,
     decimals: u8,

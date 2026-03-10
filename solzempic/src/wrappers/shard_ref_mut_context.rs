@@ -82,6 +82,12 @@ enum HighRef<'a, T: Loadable, F: Framework> {
     AliasCurrent, // Same as current (but not low)
 }
 
+type TripleAccountRefMut<'ctx, 'a, T, F> = (
+    &'ctx mut AccountRefMut<'a, T, F>,
+    &'ctx mut AccountRefMut<'a, T, F>,
+    &'ctx mut AccountRefMut<'a, T, F>,
+);
+
 impl<'a, T: Loadable, F: Framework> ShardRefMutContext<'a, T, F> {
     /// Create a new shard context by loading three account infos.
     ///
@@ -465,13 +471,7 @@ impl<'a, T: Loadable, F: Framework> ShardRefMutContext<'a, T, F> {
     /// let current_data = current.data_mut();
     /// ```
     #[inline]
-    pub fn all_refs_mut(
-        &mut self,
-    ) -> (
-        &mut AccountRefMut<'a, T, F>,
-        &mut AccountRefMut<'a, T, F>,
-        &mut AccountRefMut<'a, T, F>,
-    ) {
+    pub fn all_refs_mut(&mut self) -> TripleAccountRefMut<'_, 'a, T, F> {
         // Safety: Same as all_mut() - we use raw pointers to allow intentional aliasing
         let low_ptr = &mut self.low as *mut AccountRefMut<'a, T, F>;
         let current_ptr = self.current_account_mut() as *mut AccountRefMut<'a, T, F>;

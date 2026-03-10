@@ -361,7 +361,7 @@ mod tests {
     #[test]
     fn test_truncated_mint_data() {
         // Verify truncated data is too short for decimals
-        let data = vec![0u8; 40];
+        let data = [0u8; 40];
         assert!(data.len() < 82, "Truncated data should be too short");
         assert!(
             data.get(44).is_none(),

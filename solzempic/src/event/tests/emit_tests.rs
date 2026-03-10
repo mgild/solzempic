@@ -112,8 +112,6 @@ fn test_event_discriminator_prepending() {
 #[test]
 fn test_multiple_event_sizes() {
     // Test various event sizes to ensure proper handling
-    struct SizeTest<const N: usize>;
-
     macro_rules! test_size {
         ($n:expr) => {{
             #[repr(C)]

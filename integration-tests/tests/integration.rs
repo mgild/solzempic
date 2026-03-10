@@ -51,8 +51,8 @@ fn build_init_counter_ix(payer: &Pubkey, counter: &Pubkey, initial_count: u64) -
     Instruction {
         program_id: PROGRAM_ID,
         accounts: vec![
-            AccountMeta::new(*payer, true),        // payer/signer
-            AccountMeta::new(*counter, false),      // counter account
+            AccountMeta::new(*payer, true),    // payer/signer
+            AccountMeta::new(*counter, false), // counter account
             AccountMeta::new_readonly(solana_sdk::system_program::ID, false), // system program
         ],
         data,
@@ -66,7 +66,7 @@ fn build_increment_ix(counter: &Pubkey, owner: &Pubkey, amount: u64) -> Instruct
     Instruction {
         program_id: PROGRAM_ID,
         accounts: vec![
-            AccountMeta::new(*counter, false), // counter account
+            AccountMeta::new(*counter, false),       // counter account
             AccountMeta::new_readonly(*owner, true), // owner/signer
         ],
         data,
@@ -80,8 +80,8 @@ fn build_transfer_sol_ix(from: &Pubkey, to: &Pubkey, amount: u64) -> Instruction
     Instruction {
         program_id: PROGRAM_ID,
         accounts: vec![
-            AccountMeta::new(*from, true),  // from/signer
-            AccountMeta::new(*to, false),   // to
+            AccountMeta::new(*from, true), // from/signer
+            AccountMeta::new(*to, false),  // to
             AccountMeta::new_readonly(solana_sdk::system_program::ID, false), // system program
         ],
         data,
@@ -382,7 +382,10 @@ fn test_load_uninitialized_fails() {
         svm.latest_blockhash(),
     );
     let result = svm.send_transaction(tx);
-    assert!(result.is_err(), "Load uninitialized should fail (wrong discriminator)");
+    assert!(
+        result.is_err(),
+        "Load uninitialized should fail (wrong discriminator)"
+    );
 }
 
 #[test]

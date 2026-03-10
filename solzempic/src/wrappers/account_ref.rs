@@ -124,9 +124,7 @@ impl<'a, T: Loadable, F: Framework> AccountRef<'a, T, F> {
     pub fn load_unchecked(info: &'a AccountView) -> Result<Self, ProgramError> {
         // Use data_len() + data_ptr() separately instead of borrow_unchecked()
         // which constructs a full slice. Saves the from_raw_parts overhead.
-        if info.data_len() < T::LEN
-            || unsafe { *info.data_ptr() } != T::DISCRIMINATOR
-        {
+        if info.data_len() < T::LEN || unsafe { *info.data_ptr() } != T::DISCRIMINATOR {
             return Err(crate::errors::invalid_account_data());
         }
 

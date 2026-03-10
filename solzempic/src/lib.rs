@@ -223,7 +223,8 @@ pub use event::{emit_event, Event, EventFieldMeta, EventIdlMeta, EventMeta};
 
 // Re-export derive macros (Account derive renamed to avoid conflict with Account trait)
 pub use solzempic_macros::{
-    account, event, instruction, instruction_raw, params, Account as AccountDerive, SolzempicEntrypoint,
+    account, event, instruction, instruction_raw, params, Account as AccountDerive,
+    SolzempicEntrypoint,
 };
 
 /// Define an AccountType enum with automatic discriminator values.
@@ -387,6 +388,7 @@ impl AsAccountView for &AccountView {
 /// - **Testability**: Each phase can be tested in isolation
 /// - **Fail-fast**: Structural errors are caught before any state changes
 /// - **Clarity**: Clear separation between "what we need" and "what we do"
+///
 /// Marker trait that associates a params type with an instruction.
 ///
 /// This allows dispatch to know the params type without a lifetime parameter.
@@ -472,7 +474,11 @@ pub trait Instruction<'a>: InstructionParams + Sized {
 /// for hot-path instructions where every CU matters.
 pub trait InstructionRaw: InstructionParams {
     /// Execute the instruction directly from raw accounts and parameters.
-    fn execute_raw(program_id: &Address, accounts: &[AccountView], params: &Self::Params) -> ProgramResult;
+    fn execute_raw(
+        program_id: &Address,
+        accounts: &[AccountView],
+        params: &Self::Params,
+    ) -> ProgramResult;
 }
 
 /// Parse instruction parameters from raw bytes using zero-copy.

@@ -186,9 +186,7 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
     pub fn load_unchecked(info: &'a AccountView) -> Result<Self, ProgramError> {
         // Use data_len() + data_ptr() separately instead of borrow_unchecked()
         // which constructs a full slice. Saves the from_raw_parts overhead.
-        if info.data_len() < T::LEN
-            || unsafe { *info.data_ptr() } != T::DISCRIMINATOR
-        {
+        if info.data_len() < T::LEN || unsafe { *info.data_ptr() } != T::DISCRIMINATOR {
             return Err(crate::errors::invalid_account_data());
         }
 
@@ -309,7 +307,6 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
         let (expected, bump) = Address::find_program_address(seeds, &F::PROGRAM_ID);
         (self.info.address().as_ref() == expected.as_ref(), bump)
     }
-
 }
 
 impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
@@ -509,7 +506,6 @@ impl<'a, T: Loadable, F: Framework> crate::AsAccountView for &AccountRefMut<'a, 
 /// let vault_pda = Vault::find_pda(market, idx, &PROGRAM_ID);
 /// let vault = pda_builder.init_pda::<Vault>(&accounts[6], &vault_pda)?;
 /// ```
-
 impl<'a, T: Loadable, F: Framework> crate::HasAddress for AccountRefMut<'a, T, F> {
     #[inline]
     fn address(&self) -> &Address {

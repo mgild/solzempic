@@ -199,24 +199,36 @@ fn parse_instruction_attr(attr: TokenStream) -> (syn::Path, Option<usize>) {
         let params_part = attr_str[..comma_pos].trim();
         let rest = attr_str[comma_pos + 1..].trim();
 
-        let params_type: syn::Path = syn::parse_str(params_part)
-            .expect("instruction macro requires params type, e.g. #[instruction(MyParams, accounts = 30)]");
+        let params_type: syn::Path = syn::parse_str(params_part).expect(
+            "instruction macro requires params type, e.g. #[instruction(MyParams, accounts = 30)]",
+        );
 
         let mut num_accounts: Option<usize> = None;
         for param in rest.split(',') {
             let param = param.trim();
-            if let Some(value_str) = param.strip_prefix("accounts").and_then(|s| s.trim().strip_prefix('=')) {
-                num_accounts = Some(value_str.trim().parse::<usize>()
-                    .expect("accounts must be a positive integer"));
+            if let Some(value_str) = param
+                .strip_prefix("accounts")
+                .and_then(|s| s.trim().strip_prefix('='))
+            {
+                num_accounts = Some(
+                    value_str
+                        .trim()
+                        .parse::<usize>()
+                        .expect("accounts must be a positive integer"),
+                );
             } else if !param.is_empty() {
-                panic!("Unknown instruction parameter: '{}'. Expected: accounts = N", param);
+                panic!(
+                    "Unknown instruction parameter: '{}'. Expected: accounts = N",
+                    param
+                );
             }
         }
 
         (params_type, num_accounts)
     } else {
-        let params_type: syn::Path = syn::parse(attr)
-            .expect("instruction macro requires params type, e.g. #[instruction(MyParams, accounts = 30)]");
+        let params_type: syn::Path = syn::parse(attr).expect(
+            "instruction macro requires params type, e.g. #[instruction(MyParams, accounts = 30)]",
+        );
         (params_type, None)
     }
 }
@@ -299,9 +311,16 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
     if !rest.is_empty() {
         for param in rest.split(',') {
             let param = param.trim();
-            if let Some(value_str) = param.strip_prefix("max_accounts").and_then(|s| s.trim().strip_prefix('=')) {
-                max_accounts = Some(value_str.trim().parse::<usize>()
-                    .expect("max_accounts must be a positive integer"));
+            if let Some(value_str) = param
+                .strip_prefix("max_accounts")
+                .and_then(|s| s.trim().strip_prefix('='))
+            {
+                max_accounts = Some(
+                    value_str
+                        .trim()
+                        .parse::<usize>()
+                        .expect("max_accounts must be a positive integer"),
+                );
             } else if !param.is_empty() {
                 panic!("Unknown SolzempicEntrypoint parameter: {}", param);
             }
@@ -324,7 +343,10 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
                 .expect("SolzempicEntrypoint requires explicit discriminant values");
             let disc_expr = &discriminant.1;
             let accounts = parse_variant_accounts(&variant.attrs);
-            let is_execute_only = variant.attrs.iter().any(|a| a.path().is_ident("execute_only"));
+            let is_execute_only = variant
+                .attrs
+                .iter()
+                .any(|a| a.path().is_ident("execute_only"));
             (variant_name, disc_expr, accounts, is_execute_only)
         })
         .collect();

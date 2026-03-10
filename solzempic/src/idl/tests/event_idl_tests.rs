@@ -237,7 +237,7 @@ fn test_multiple_events_collection() {
         type_name: "Address",
     }];
 
-    let events = vec![
+    let events = [
         EventMeta {
             name: "Event1",
             discriminator: [1; 8],

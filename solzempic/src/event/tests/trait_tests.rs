@@ -71,7 +71,7 @@ fn test_event_is_clone() {
         flag: 1,
         _padding: [0; 7],
     };
-    let event2 = event1.clone();
+    let event2 = event1;
     assert_eq!(event1.amount, event2.amount);
     assert_eq!(event1.flag, event2.flag);
 }

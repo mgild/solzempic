@@ -158,9 +158,8 @@ pub fn transfer_lamports<'a>(
         discriminator: 2,
         amount,
     };
-    let instruction_data = unsafe {
-        core::slice::from_raw_parts(&ix_data as *const TransferData as *const u8, 12)
-    };
+    let instruction_data =
+        unsafe { core::slice::from_raw_parts(&ix_data as *const TransferData as *const u8, 12) };
 
     let account_metas = [
         InstructionAccount {
@@ -178,7 +177,7 @@ pub fn transfer_lamports<'a>(
     let instruction = InstructionView {
         program_id: &SYSTEM_PROGRAM_ID,
         accounts: &account_metas,
-        data: &instruction_data,
+        data: instruction_data,
     };
 
     let account_infos = &[from, to, system_program];
@@ -292,7 +291,7 @@ pub fn create_pda_account<'a>(
     let instruction = InstructionView {
         program_id: &SYSTEM_PROGRAM_ID,
         accounts: &account_metas,
-        data: &instruction_data,
+        data: instruction_data,
     };
 
     // Only pass the 2 accounts referenced by the instruction (matches pinocchio-system)
