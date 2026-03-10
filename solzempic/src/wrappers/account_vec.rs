@@ -181,11 +181,11 @@ impl<'a, T: FromAccountSlice<'a>> AccountVec<'a, T> {
     ///
     /// # Errors
     ///
-    /// Returns [`ProgramError::NotEnoughAccountKeys`] if a group starts but the
-    /// slice does not contain enough accounts to complete it (partial group).
-    ///
     /// Propagates any `Err` returned by [`FromAccountSlice::from_slice`] for
-    /// individual group validation failures.
+    /// individual group validation failures.  A partial trailing group (fewer
+    /// remaining accounts than `ACCOUNTS_PER_GROUP`, with no sentinel) is
+    /// treated as end-of-list rather than an error, making the sentinel truly
+    /// optional when the vec is last in the account list.
     ///
     /// # Example
     ///
@@ -210,10 +210,12 @@ impl<'a, T: FromAccountSlice<'a>> AccountVec<'a, T> {
                 break;
             }
 
-            // We have the start of a new group.  Ensure enough accounts remain.
+            // We have the start of a new group.  If fewer than a full group's worth
+            // of accounts remain (and no sentinel was found), the vec is simply
+            // exhausted — treat it the same as end-of-slice.  This makes the
+            // sentinel truly optional when the vec is the last set of accounts.
             if remaining.len() < T::ACCOUNTS_PER_GROUP {
-                // Partial group — the client passed an incomplete set of accounts.
-                return Err(ProgramError::NotEnoughAccountKeys);
+                break;
             }
 
             // Parse exactly ACCOUNTS_PER_GROUP accounts as one group.
