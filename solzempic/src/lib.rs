@@ -208,7 +208,7 @@ pub use programs::{
     TOKEN_PROGRAM_ID,
 };
 pub use wrappers::{
-    AccountRef, AccountRefMut, AsAccountRef, PdaInitBuilder, ShardListNode, ShardListRef,
+    AccountRef, AccountRefMut, AccountVec, AsAccountRef, FromAccountSlice, PdaInitBuilder, ShardListNode, ShardListRef,
     ShardListRefMut, ShardRefContext, ShardRefMutContext,
 };
 
