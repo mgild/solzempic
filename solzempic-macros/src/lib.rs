@@ -415,44 +415,42 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
             let n_lit = proc_macro2::Literal::usize_unsuffixed(n);
             quote! {
                 #disc => {
-                    let __param_size = core::mem::size_of::<<#name as ::solzempic::InstructionParams>::Params>();
-                    if data.len() < 1 + __param_size {
+                    if data.len() < 1 + ::core::mem::size_of::<<#name as ::solzempic::InstructionParams>::Params>() {
                         return Err(::pinocchio::error::ProgramError::InvalidInstructionData);
                     }
                     #accounts_check
-                    let params = unsafe { *(data.as_ptr().add(1) as *const <#name as ::solzempic::InstructionParams>::Params) };
                     unsafe {
                         // AccountView is repr(transparent) over *mut RuntimeAccount.
                         let ptrs: [*mut ::pinocchio::account::RuntimeAccount; #n_lit] =
                             *(accounts.as_ptr() as *const [*mut ::pinocchio::account::RuntimeAccount; #n_lit]);
-                        <#name<'_> as ::solzempic::InstructionRawUnsafe<#n_lit>>::execute_unsafe(program_id, ptrs, &params)
+                        // Pass reference directly into instruction buffer — avoids stack copy.
+                        let params_ptr = data.as_ptr().add(1) as *const <#name as ::solzempic::InstructionParams>::Params;
+                        <#name<'_> as ::solzempic::InstructionRawUnsafe<#n_lit>>::execute_unsafe(program_id, ptrs, &*params_ptr)
                     }
                 },
             }
         } else if *is_execute_only {
             quote! {
                 #disc => {
-                    let __param_size = core::mem::size_of::<<#name as ::solzempic::InstructionParams>::Params>();
-                    if data.len() < 1 + __param_size {
+                    if data.len() < 1 + ::core::mem::size_of::<<#name as ::solzempic::InstructionParams>::Params>() {
                         return Err(::pinocchio::error::ProgramError::InvalidInstructionData);
                     }
                     #accounts_check
-                    let params = unsafe { *(data.as_ptr().add(1) as *const <#name as ::solzempic::InstructionParams>::Params) };
-                    <#name<'_> as ::solzempic::InstructionRaw>::execute_raw(program_id, accounts, &params)
+                    let params_ptr = unsafe { data.as_ptr().add(1) as *const <#name as ::solzempic::InstructionParams>::Params };
+                    <#name<'_> as ::solzempic::InstructionRaw>::execute_raw(program_id, accounts, unsafe { &*params_ptr })
                 },
             }
         } else {
             quote! {
                 #disc => {
-                    let __param_size = core::mem::size_of::<<#name as ::solzempic::InstructionParams>::Params>();
-                    if data.len() < 1 + __param_size {
+                    if data.len() < 1 + ::core::mem::size_of::<<#name as ::solzempic::InstructionParams>::Params>() {
                         return Err(::pinocchio::error::ProgramError::InvalidInstructionData);
                     }
                     #accounts_check
-                    let params = unsafe { *(data.as_ptr().add(1) as *const <#name as ::solzempic::InstructionParams>::Params) };
-                    let mut ctx = <#name<'_> as ::solzempic::Instruction<'_>>::build(accounts, &params)?;
-                    ctx.validate(program_id, &params)?;
-                    ctx.execute(program_id, &params)
+                    let params_ptr = unsafe { data.as_ptr().add(1) as *const <#name as ::solzempic::InstructionParams>::Params };
+                    let mut ctx = <#name<'_> as ::solzempic::Instruction<'_>>::build(accounts, unsafe { &*params_ptr })?;
+                    ctx.validate(program_id, unsafe { &*params_ptr })?;
+                    ctx.execute(program_id, unsafe { &*params_ptr })
                 },
             }
         }
