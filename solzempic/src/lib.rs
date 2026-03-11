@@ -138,6 +138,7 @@
 extern crate alloc;
 
 mod account;
+pub mod entrypoint_no_dup;
 pub mod event;
 pub mod programs;
 pub mod traits;
@@ -226,6 +227,28 @@ pub use solzempic_macros::{
     account, event, instruction, instruction_raw, params, Account as AccountDerive,
     SolzempicEntrypoint,
 };
+
+/// Declare a program entrypoint that skips the per-account duplicate check.
+///
+/// Equivalent to pinocchio's `program_entrypoint!` but uses
+/// [`entrypoint_no_dup::process_entrypoint_no_dup`] internally, saving ~3-4 CU
+/// per account by removing the `borrow_state == NON_DUP_MARKER` branch.
+///
+/// **Safety**: Only use this when you can guarantee no duplicate accounts are
+/// ever passed to the program. Passing duplicate accounts is undefined behavior.
+#[macro_export]
+macro_rules! no_dup_program_entrypoint {
+    ( $process_instruction:expr, $maximum:expr ) => {
+        /// Program entrypoint (no-dup variant — skips per-account dup check).
+        #[no_mangle]
+        pub unsafe extern "C" fn entrypoint(input: *mut u8) -> u64 {
+            $crate::entrypoint_no_dup::process_entrypoint_no_dup::<$maximum>(
+                input,
+                $process_instruction,
+            )
+        }
+    };
+}
 
 /// Define an AccountType enum with automatic discriminator values.
 ///

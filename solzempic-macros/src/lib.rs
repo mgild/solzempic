@@ -306,8 +306,9 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         quote! { #ident }
     };
 
-    // Parse optional key=value parameters (e.g., max_accounts = 32)
+    // Parse optional key=value parameters (e.g., max_accounts = 32, no_dup)
     let mut max_accounts: Option<usize> = None;
+    let mut no_dup = false;
     if !rest.is_empty() {
         for param in rest.split(',') {
             let param = param.trim();
@@ -321,6 +322,8 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
                         .parse::<usize>()
                         .expect("max_accounts must be a positive integer"),
                 );
+            } else if param == "no_dup" {
+                no_dup = true;
             } else if !param.is_empty() {
                 panic!("Unknown SolzempicEntrypoint parameter: {}", param);
             }
@@ -332,7 +335,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         _ => panic!("SolzempicEntrypoint can only be applied to enums"),
     };
 
-    // Collect variant info (name, discriminator, accounts, and execute_only flag)
+    // Collect variant info (name, discriminator, accounts, execute_only flag, and no_dup account count)
     let variant_info: Vec<_> = variants
         .iter()
         .map(|variant| {
@@ -347,7 +350,18 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
                 .attrs
                 .iter()
                 .any(|a| a.path().is_ident("execute_only"));
-            (variant_name, disc_expr, accounts, is_execute_only)
+            // Parse #[no_dup(N)] — N is the exact account count for the no-dup fast path.
+            let no_dup_accounts: Option<usize> = variant.attrs.iter().find_map(|a| {
+                if a.path().is_ident("no_dup") {
+                    let lit: syn::LitInt = a
+                        .parse_args()
+                        .expect("#[no_dup(N)] requires a positive integer account count, e.g. #[no_dup(4)]");
+                    Some(lit.base10_parse::<usize>().expect("no_dup account count must be a valid usize"))
+                } else {
+                    None
+                }
+            });
+            (variant_name, disc_expr, accounts, is_execute_only, no_dup_accounts)
         })
         .collect();
 
@@ -371,12 +385,12 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         .collect();
 
     // Generate TryFrom<u8> match arms
-    let try_from_arms = variant_info.iter().map(|(name, disc, _, _)| {
+    let try_from_arms = variant_info.iter().map(|(name, disc, _, _, _)| {
         quote! { #disc => Ok(#enum_name::#name), }
     });
 
     // Generate dispatch match arms (for backward compat)
-    let dispatch_arms = variant_info.iter().map(|(name, _, _, is_execute_only)| {
+    let dispatch_arms = variant_info.iter().map(|(name, _, _, is_execute_only, _)| {
         if *is_execute_only {
             quote! {
                 #enum_name::#name => {
@@ -394,7 +408,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
     // Generate process match arms — fully inlined dispatch that skips
     // Instruction::process and parse_params, avoiding redundant slice/length ops.
     // When REQUIRED_ACCOUNTS is defined, auto-checks accounts.len() before dispatch.
-    let process_arms = variant_info.iter().map(|(name, disc, _, is_execute_only)| {
+    let process_arms = variant_info.iter().map(|(name, disc, _, is_execute_only, _)| {
         // Account length check — uses REQUIRED_ACCOUNTS from InstructionParams trait.
         // When REQUIRED_ACCOUNTS is 0 (default), the compiler eliminates this branch entirely.
         let accounts_check = quote! {
@@ -436,7 +450,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
     });
 
     // Generate IDL metadata entries
-    let idl_entries = variant_info.iter().map(|(name, disc, _, _)| {
+    let idl_entries = variant_info.iter().map(|(name, disc, _, _, _)| {
         quote! {
             ::solzempic::InstructionMeta {
                 name: #name::IDL_NAME,
@@ -448,7 +462,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
     });
 
     // Generate variant definitions for the enum
-    let variant_defs = variant_info.iter().map(|(name, disc, _accounts, _)| {
+    let variant_defs = variant_info.iter().map(|(name, disc, _accounts, _, _)| {
         quote! {
             #name = #disc
         }
@@ -465,7 +479,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
 
     // Generate Shank-compatible IDL instruction metadata for each variant
     // This replaces what ShankInstruction derive would generate
-    let shank_instruction_metas = variant_info.iter().map(|(name, disc, accounts, _)| {
+    let shank_instruction_metas = variant_info.iter().map(|(name, disc, accounts, _, _)| {
         let name_str = name.to_string();
         // Convert PascalCase to snake_case for module name
         let mod_name_str = to_snake_case(&name_str);
@@ -507,6 +521,80 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
             quote! { , { #lit } }
         }
         None => quote! {},
+    };
+
+    // no_dup variant: generates a different entrypoint call
+    let max_accounts_val: proc_macro2::TokenStream = match max_accounts {
+        Some(n) => {
+            let lit = proc_macro2::Literal::usize_unsuffixed(n);
+            quote! { #lit }
+        }
+        None => quote! { ::pinocchio::MAX_TX_ACCOUNTS },
+    };
+
+    // Collect variants annotated with #[no_dup(N)] for the per-variant fast path.
+    let no_dup_variants: Vec<(&syn::Expr, usize)> = variant_info
+        .iter()
+        .filter_map(|(_, disc, _, _, no_dup_accounts)| no_dup_accounts.map(|n| (*disc, n)))
+        .collect();
+
+    let entrypoint_invocation: proc_macro2::TokenStream = if !no_dup_variants.is_empty() {
+        // Hybrid: fast no-dup path for #[no_dup(N)] variants, standard pinocchio fallback.
+        //
+        // For each no-dup variant:
+        //   1. Check num_accounts == N (the annotated account count).
+        //   2. Deserialize N accounts using the no-dup path (skips per-account dup check).
+        //   3. If instruction discriminator matches, dispatch directly and return.
+        //   4. Otherwise fall through to the standard pinocchio entrypoint.
+        let fast_paths = no_dup_variants.iter().map(|(disc, n)| {
+            let n_lit = proc_macro2::Literal::usize_unsuffixed(*n);
+            quote! {
+                if __n == #n_lit {
+                    let __uninit = ::core::mem::MaybeUninit::<::pinocchio::AccountView>::uninit();
+                    let mut __accounts = [__uninit; #n_lit];
+                    let (__pid, __cnt, __data) = unsafe {
+                        ::solzempic::entrypoint_no_dup::deserialize_no_dup::<#n_lit>(input, &mut __accounts)
+                    };
+                    if __data.first().copied() == ::core::option::Option::Some(#disc as u8) {
+                        return match process_instruction(
+                            __pid,
+                            unsafe { ::core::slice::from_raw_parts(__accounts.as_ptr() as _, __cnt) },
+                            __data,
+                        ) {
+                            ::core::result::Result::Ok(()) => ::pinocchio::SUCCESS,
+                            ::core::result::Result::Err(__e) => __e.into(),
+                        };
+                    }
+                }
+            }
+        });
+        quote! {
+            #[cfg(not(feature = "no-entrypoint"))]
+            ::pinocchio::default_allocator!();
+            #[cfg(not(feature = "no-entrypoint"))]
+            ::pinocchio::default_panic_handler!();
+            #[cfg(not(feature = "no-entrypoint"))]
+            #[no_mangle]
+            pub unsafe extern "C" fn entrypoint(input: *mut u8) -> u64 {
+                let __n: usize = unsafe { *(input as *const u64) as usize };
+                #(#fast_paths)*
+                unsafe { ::pinocchio::entrypoint::process_entrypoint::<{#max_accounts_val}>(input, process_instruction) }
+            }
+        }
+    } else if no_dup {
+        quote! {
+            #[cfg(not(feature = "no-entrypoint"))]
+            ::solzempic::no_dup_program_entrypoint!(process_instruction, { #max_accounts_val });
+            #[cfg(not(feature = "no-entrypoint"))]
+            ::pinocchio::default_allocator!();
+            #[cfg(not(feature = "no-entrypoint"))]
+            ::pinocchio::default_panic_handler!();
+        }
+    } else {
+        quote! {
+            #[cfg(not(feature = "no-entrypoint"))]
+            ::pinocchio::entrypoint!(process_instruction #entrypoint_max_accounts);
+        }
     };
 
     let expanded = quote! {
@@ -600,8 +688,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
             #enum_name::process(program_id, accounts, instruction_data)
         }
 
-        #[cfg(not(feature = "no-entrypoint"))]
-        ::pinocchio::entrypoint!(process_instruction #entrypoint_max_accounts);
+        #entrypoint_invocation
 
         /// Get all instruction metadata for IDL generation.
         /// Returns a static slice of InstructionMeta for each instruction.
