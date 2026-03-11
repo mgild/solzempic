@@ -394,41 +394,6 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         quote! { #disc => Ok(#enum_name::#name), }
     });
 
-    // Generate dispatch match arms (for backward compat)
-    let dispatch_arms = variant_info.iter().map(|(name, _, _, is_execute_only, no_dup_accounts, is_raw_unsafe)| {
-        if *is_execute_only && *is_raw_unsafe {
-            // raw_unsafe: extract *mut RuntimeAccount ptrs from AccountView slice by casting.
-            // Safety: AccountView is a newtype wrapper over *mut RuntimeAccount.
-            let n = no_dup_accounts.expect("#[raw_unsafe] requires #[no_dup(N)] on the same variant");
-            let n_lit = proc_macro2::Literal::usize_unsuffixed(n);
-            quote! {
-                #enum_name::#name => {
-                    let params = ::solzempic::parse_params::<<#name<'_> as ::solzempic::InstructionParams>::Params>(data)?;
-                    if accounts.len() < #n_lit {
-                        return Err(::pinocchio::error::ProgramError::NotEnoughAccountKeys);
-                    }
-                    unsafe {
-                        // AccountView is repr(transparent) over *mut RuntimeAccount.
-                        let ptrs: [*mut ::pinocchio::account::RuntimeAccount; #n_lit] =
-                            *(accounts.as_ptr() as *const [*mut ::pinocchio::account::RuntimeAccount; #n_lit]);
-                        <#name<'_> as ::solzempic::InstructionRawUnsafe<#n_lit>>::execute_unsafe(program_id, ptrs, &params)
-                    }
-                },
-            }
-        } else if *is_execute_only {
-            quote! {
-                #enum_name::#name => {
-                    let params = ::solzempic::parse_params::<<#name<'_> as ::solzempic::InstructionParams>::Params>(data)?;
-                    <#name<'_> as ::solzempic::InstructionRaw>::execute_raw(program_id, accounts, &params)
-                },
-            }
-        } else {
-            quote! {
-                #enum_name::#name => <#name<'_> as ::solzempic::Instruction<'_>>::process(program_id, accounts, data),
-            }
-        }
-    });
-
     // Generate process match arms — fully inlined dispatch that skips
     // Instruction::process and parse_params, avoiding redundant slice/length ops.
     // When REQUIRED_ACCOUNTS is defined, auto-checks accounts.len() before dispatch.
@@ -602,10 +567,13 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
                     if __n == #n_lit {
                         // Pass input already advanced past the account count u64 to avoid
                         // a redundant pointer add inside deserialize_no_dup_ptrs.
-                        let (__ptrs, __pid, __data) = unsafe {
+                        let (__ptrs, __pid, __data) = match unsafe {
                             ::solzempic::entrypoint_no_dup::deserialize_no_dup_ptrs::<#n_lit>(
                                 input.add(::core::mem::size_of::<u64>()),
                             )
+                        } {
+                            ::core::result::Result::Ok(v) => v,
+                            ::core::result::Result::Err(e) => return e.into(),
                         };
                         // Single branch: check params length (covers discriminator byte too)
                         // then read discriminator directly — avoids first()/Option overhead.
@@ -723,20 +691,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         }
 
         impl #enum_name {
-            /// Dispatch to handler (use after TryFrom conversion)
-            #[inline]
-            pub fn dispatch(
-                self,
-                program_id: &::solana_address::Address,
-                accounts: &[::pinocchio::AccountView],
-                data: &[u8],
-            ) -> ::pinocchio::ProgramResult {
-                match self {
-                    #(#dispatch_arms)*
-                }
-            }
-
-            /// Process instruction data directly (more efficient - skips enum construction)
+            /// Process instruction data directly
             #[inline]
             pub fn process(
                 program_id: &::solana_address::Address,
