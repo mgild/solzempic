@@ -612,8 +612,10 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
                         if __data.len() >= 1 + ::core::mem::size_of::<<#name as ::solzempic::InstructionParams>::Params>()
                             && unsafe { *__data.as_ptr() } == #disc as u8
                         {
-                            let __params = unsafe { *(__data.as_ptr().add(1) as *const <#name as ::solzempic::InstructionParams>::Params) };
-                            return match unsafe { <#name<'_> as ::solzempic::InstructionRawUnsafe<#n_lit>>::execute_unsafe(__pid, __ptrs, &__params) } {
+                            // Pass a reference directly into the instruction buffer — avoids
+                            // copying Params onto the stack before calling execute_unsafe.
+                            let __params_ptr = unsafe { __data.as_ptr().add(1) as *const <#name as ::solzempic::InstructionParams>::Params };
+                            return match unsafe { <#name<'_> as ::solzempic::InstructionRawUnsafe<#n_lit>>::execute_unsafe(__pid, __ptrs, &*__params_ptr) } {
                                 ::core::result::Result::Ok(()) => ::pinocchio::SUCCESS,
                                 ::core::result::Result::Err(__e) => __e.into(),
                             };
