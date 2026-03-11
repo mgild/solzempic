@@ -182,6 +182,47 @@ pub unsafe fn deserialize_no_dup<const MAX_ACCOUNTS: usize>(
     (program_id, processed, instruction_data)
 }
 
+/// Parse SVM input buffer into exactly `N` raw `RuntimeAccount` pointers, skipping the dup check.
+///
+/// Unlike [`deserialize_no_dup`], this returns raw pointers directly into the SBF input buffer
+/// rather than `AccountView` wrappers, and does not require an output array parameter.
+/// The caller MUST ensure the buffer contains exactly `N` non-duplicate accounts.
+///
+/// # Safety
+///
+/// - `input` must be a valid SVM serialized input buffer.
+/// - All account slots must be non-duplicate (`borrow_state == 0xFF`).
+/// - The `num_accounts` field in the buffer must be exactly `N`.
+///   Passing a buffer where the count differs is undefined behavior.
+#[inline(always)]
+pub unsafe fn deserialize_no_dup_ptrs<const N: usize>(
+    mut input: *mut u8,
+) -> ([*mut RuntimeAccount; N], &'static Address, &'static [u8]) {
+    // Skip the account count u64 (caller already read it for the == N check).
+    input = input.add(size_of::<u64>());
+
+    let mut ptrs = [core::ptr::null_mut::<RuntimeAccount>(); N];
+    let mut i = 0;
+    while i < N {
+        let account: *mut RuntimeAccount = input as *mut RuntimeAccount;
+        ptrs[i] = account;
+        input = input.add(size_of::<u64>());
+        advance_input_with_account!(input, account);
+        i += 1;
+    }
+
+    // Instruction data.
+    let instruction_data_len = *(input as *const u64) as usize;
+    input = input.add(size_of::<u64>());
+    let instruction_data = from_raw_parts(input, instruction_data_len);
+    let input = input.add(instruction_data_len);
+
+    // Program ID.
+    let program_id: &'static Address = &*(input as *const Address);
+
+    (ptrs, program_id, instruction_data)
+}
+
 /// Program entrypoint — no dup check variant.
 ///
 /// Drop-in for pinocchio's `process_entrypoint`. Parses accounts without the

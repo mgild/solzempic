@@ -224,7 +224,7 @@ pub use event::{emit_event, Event, EventFieldMeta, EventIdlMeta, EventMeta};
 
 // Re-export derive macros (Account derive renamed to avoid conflict with Account trait)
 pub use solzempic_macros::{
-    account, event, instruction, instruction_raw, params, Account as AccountDerive,
+    account, event, instruction, instruction_raw, instruction_raw_unsafe, params, Account as AccountDerive,
     SolzempicEntrypoint,
 };
 
@@ -500,6 +500,35 @@ pub trait InstructionRaw: InstructionParams {
     fn execute_raw(
         program_id: &Address,
         accounts: &[AccountView],
+        params: &Self::Params,
+    ) -> ProgramResult;
+}
+
+/// Single-function instruction with raw pointer access, bypassing `AccountView` wrappers.
+///
+/// This is the maximum-efficiency variant of [`InstructionRaw`]: instead of receiving
+/// `&[AccountView]`, the handler receives a fixed-size array of raw `*mut RuntimeAccount`
+/// pointers directly from the SBF input buffer.
+///
+/// Benefits over `InstructionRaw`:
+/// - No `[MaybeUninit<AccountView>; N]` stack allocation in the entrypoint
+/// - No `from_raw_parts` call to construct a slice
+/// - Fixed-size array indexing with no bounds checks
+/// - Bypasses `process_instruction` dispatch entirely — `execute_unsafe` is called directly
+///
+/// Use `#[instruction_raw_unsafe(ParamsType, accounts = N)]` on an impl block.
+/// Mark the corresponding enum variant with `#[execute_only]`, `#[no_dup(N)]`, and
+/// `#[raw_unsafe]` in `SolzempicEntrypoint`.
+pub trait InstructionRawUnsafe<const N: usize>: InstructionParams {
+    /// Execute the instruction directly from raw `RuntimeAccount` pointers.
+    ///
+    /// # Safety
+    ///
+    /// All pointers in `accounts` must be valid, non-null, non-aliased `RuntimeAccount`
+    /// pointers into the SBF input buffer, valid for the duration of this call.
+    unsafe fn execute_unsafe(
+        program_id: &Address,
+        accounts: [*mut pinocchio::account::RuntimeAccount; N],
         params: &Self::Params,
     ) -> ProgramResult;
 }

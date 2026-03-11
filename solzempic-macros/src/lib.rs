@@ -350,6 +350,11 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
                 .attrs
                 .iter()
                 .any(|a| a.path().is_ident("execute_only"));
+            // Parse #[raw_unsafe] — marks variant for the raw-pointer entrypoint path.
+            let is_raw_unsafe = variant
+                .attrs
+                .iter()
+                .any(|a| a.path().is_ident("raw_unsafe"));
             // Parse #[no_dup(N)] — N is the exact account count for the no-dup fast path.
             let no_dup_accounts: Option<usize> = variant.attrs.iter().find_map(|a| {
                 if a.path().is_ident("no_dup") {
@@ -361,7 +366,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
                     None
                 }
             });
-            (variant_name, disc_expr, accounts, is_execute_only, no_dup_accounts)
+            (variant_name, disc_expr, accounts, is_execute_only, no_dup_accounts, is_raw_unsafe)
         })
         .collect();
 
@@ -385,13 +390,32 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         .collect();
 
     // Generate TryFrom<u8> match arms
-    let try_from_arms = variant_info.iter().map(|(name, disc, _, _, _)| {
+    let try_from_arms = variant_info.iter().map(|(name, disc, _, _, _, _)| {
         quote! { #disc => Ok(#enum_name::#name), }
     });
 
     // Generate dispatch match arms (for backward compat)
-    let dispatch_arms = variant_info.iter().map(|(name, _, _, is_execute_only, _)| {
-        if *is_execute_only {
+    let dispatch_arms = variant_info.iter().map(|(name, _, _, is_execute_only, no_dup_accounts, is_raw_unsafe)| {
+        if *is_execute_only && *is_raw_unsafe {
+            // raw_unsafe: extract *mut RuntimeAccount ptrs from AccountView slice by casting.
+            // Safety: AccountView is a newtype wrapper over *mut RuntimeAccount.
+            let n = no_dup_accounts.expect("#[raw_unsafe] requires #[no_dup(N)] on the same variant");
+            let n_lit = proc_macro2::Literal::usize_unsuffixed(n);
+            quote! {
+                #enum_name::#name => {
+                    let params = ::solzempic::parse_params::<<#name<'_> as ::solzempic::InstructionParams>::Params>(data)?;
+                    if accounts.len() < #n_lit {
+                        return Err(::pinocchio::error::ProgramError::NotEnoughAccountKeys);
+                    }
+                    unsafe {
+                        // AccountView is repr(transparent) over *mut RuntimeAccount.
+                        let ptrs: [*mut ::pinocchio::account::RuntimeAccount; #n_lit] =
+                            *(accounts.as_ptr() as *const [*mut ::pinocchio::account::RuntimeAccount; #n_lit]);
+                        <#name<'_> as ::solzempic::InstructionRawUnsafe<#n_lit>>::execute_unsafe(program_id, ptrs, &params)
+                    }
+                },
+            }
+        } else if *is_execute_only {
             quote! {
                 #enum_name::#name => {
                     let params = ::solzempic::parse_params::<<#name<'_> as ::solzempic::InstructionParams>::Params>(data)?;
@@ -408,7 +432,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
     // Generate process match arms — fully inlined dispatch that skips
     // Instruction::process and parse_params, avoiding redundant slice/length ops.
     // When REQUIRED_ACCOUNTS is defined, auto-checks accounts.len() before dispatch.
-    let process_arms = variant_info.iter().map(|(name, disc, _, is_execute_only, _)| {
+    let process_arms = variant_info.iter().map(|(name, disc, _, is_execute_only, no_dup_accounts, is_raw_unsafe)| {
         // Account length check — uses REQUIRED_ACCOUNTS from InstructionParams trait.
         // When REQUIRED_ACCOUNTS is 0 (default), the compiler eliminates this branch entirely.
         let accounts_check = quote! {
@@ -420,7 +444,27 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
             }
         };
 
-        if *is_execute_only {
+        if *is_execute_only && *is_raw_unsafe {
+            // raw_unsafe: extract *mut RuntimeAccount ptrs from AccountView slice by casting.
+            let n = no_dup_accounts.expect("#[raw_unsafe] requires #[no_dup(N)] on the same variant");
+            let n_lit = proc_macro2::Literal::usize_unsuffixed(n);
+            quote! {
+                #disc => {
+                    let __param_size = core::mem::size_of::<<#name as ::solzempic::InstructionParams>::Params>();
+                    if data.len() < 1 + __param_size {
+                        return Err(::pinocchio::error::ProgramError::InvalidInstructionData);
+                    }
+                    #accounts_check
+                    let params = unsafe { *(data.as_ptr().add(1) as *const <#name as ::solzempic::InstructionParams>::Params) };
+                    unsafe {
+                        // AccountView is repr(transparent) over *mut RuntimeAccount.
+                        let ptrs: [*mut ::pinocchio::account::RuntimeAccount; #n_lit] =
+                            *(accounts.as_ptr() as *const [*mut ::pinocchio::account::RuntimeAccount; #n_lit]);
+                        <#name<'_> as ::solzempic::InstructionRawUnsafe<#n_lit>>::execute_unsafe(program_id, ptrs, &params)
+                    }
+                },
+            }
+        } else if *is_execute_only {
             quote! {
                 #disc => {
                     let __param_size = core::mem::size_of::<<#name as ::solzempic::InstructionParams>::Params>();
@@ -450,7 +494,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
     });
 
     // Generate IDL metadata entries
-    let idl_entries = variant_info.iter().map(|(name, disc, _, _, _)| {
+    let idl_entries = variant_info.iter().map(|(name, disc, _, _, _, _)| {
         quote! {
             ::solzempic::InstructionMeta {
                 name: #name::IDL_NAME,
@@ -462,7 +506,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
     });
 
     // Generate variant definitions for the enum
-    let variant_defs = variant_info.iter().map(|(name, disc, _accounts, _, _)| {
+    let variant_defs = variant_info.iter().map(|(name, disc, _accounts, _, _, _)| {
         quote! {
             #name = #disc
         }
@@ -479,7 +523,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
 
     // Generate Shank-compatible IDL instruction metadata for each variant
     // This replaces what ShankInstruction derive would generate
-    let shank_instruction_metas = variant_info.iter().map(|(name, disc, accounts, _, _)| {
+    let shank_instruction_metas = variant_info.iter().map(|(name, disc, accounts, _, _, _)| {
         let name_str = name.to_string();
         // Convert PascalCase to snake_case for module name
         let mod_name_str = to_snake_case(&name_str);
@@ -533,9 +577,12 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
     };
 
     // Collect variants annotated with #[no_dup(N)] for the per-variant fast path.
-    let no_dup_variants: Vec<(&syn::Expr, usize)> = variant_info
+    // Tuple: (discriminator_expr, account_count, variant_name, is_raw_unsafe)
+    let no_dup_variants: Vec<(&syn::Expr, usize, &syn::Ident, bool)> = variant_info
         .iter()
-        .filter_map(|(_, disc, _, _, no_dup_accounts)| no_dup_accounts.map(|n| (*disc, n)))
+        .filter_map(|(name, disc, _, _, no_dup_accounts, is_raw_unsafe)| {
+            no_dup_accounts.map(|n| (*disc, n, *name, *is_raw_unsafe))
+        })
         .collect();
 
     let entrypoint_invocation: proc_macro2::TokenStream = if !no_dup_variants.is_empty() {
@@ -543,27 +590,49 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         //
         // For each no-dup variant:
         //   1. Check num_accounts == N (the annotated account count).
-        //   2. Deserialize N accounts using the no-dup path (skips per-account dup check).
-        //   3. If instruction discriminator matches, dispatch directly and return.
+        //   2. Deserialize using the no-dup path (skips per-account dup check).
+        //   3. If instruction discriminator matches, dispatch and return.
+        //      - #[raw_unsafe]: calls execute_unsafe directly with raw RuntimeAccount ptrs.
+        //      - Otherwise: calls process_instruction (AccountView slice path).
         //   4. Otherwise fall through to the standard pinocchio entrypoint.
-        let fast_paths = no_dup_variants.iter().map(|(disc, n)| {
+        let fast_paths = no_dup_variants.iter().map(|(disc, n, name, is_raw_unsafe)| {
             let n_lit = proc_macro2::Literal::usize_unsuffixed(*n);
-            quote! {
-                if __n == #n_lit {
-                    let __uninit = ::core::mem::MaybeUninit::<::pinocchio::AccountView>::uninit();
-                    let mut __accounts = [__uninit; #n_lit];
-                    let (__pid, __cnt, __data) = unsafe {
-                        ::solzempic::entrypoint_no_dup::deserialize_no_dup::<#n_lit>(input, &mut __accounts)
-                    };
-                    if __data.first().copied() == ::core::option::Option::Some(#disc as u8) {
-                        return match process_instruction(
-                            __pid,
-                            unsafe { ::core::slice::from_raw_parts(__accounts.as_ptr() as _, __cnt) },
-                            __data,
-                        ) {
-                            ::core::result::Result::Ok(()) => ::pinocchio::SUCCESS,
-                            ::core::result::Result::Err(__e) => __e.into(),
+            if *is_raw_unsafe {
+                quote! {
+                    if __n == #n_lit {
+                        let (__ptrs, __pid, __data) = unsafe {
+                            ::solzempic::entrypoint_no_dup::deserialize_no_dup_ptrs::<#n_lit>(input)
                         };
+                        if __data.first().copied() == ::core::option::Option::Some(#disc as u8) {
+                            if __data.len() < 1 + ::core::mem::size_of::<<#name as ::solzempic::InstructionParams>::Params>() {
+                                return ::pinocchio::error::ProgramError::InvalidInstructionData.into();
+                            }
+                            let __params = unsafe { *(__data.as_ptr().add(1) as *const <#name as ::solzempic::InstructionParams>::Params) };
+                            return match unsafe { <#name<'_> as ::solzempic::InstructionRawUnsafe<#n_lit>>::execute_unsafe(__pid, __ptrs, &__params) } {
+                                ::core::result::Result::Ok(()) => ::pinocchio::SUCCESS,
+                                ::core::result::Result::Err(__e) => __e.into(),
+                            };
+                        }
+                    }
+                }
+            } else {
+                quote! {
+                    if __n == #n_lit {
+                        let __uninit = ::core::mem::MaybeUninit::<::pinocchio::AccountView>::uninit();
+                        let mut __accounts = [__uninit; #n_lit];
+                        let (__pid, __cnt, __data) = unsafe {
+                            ::solzempic::entrypoint_no_dup::deserialize_no_dup::<#n_lit>(input, &mut __accounts)
+                        };
+                        if __data.first().copied() == ::core::option::Option::Some(#disc as u8) {
+                            return match process_instruction(
+                                __pid,
+                                unsafe { ::core::slice::from_raw_parts(__accounts.as_ptr() as _, __cnt) },
+                                __data,
+                            ) {
+                                ::core::result::Result::Ok(()) => ::pinocchio::SUCCESS,
+                                ::core::result::Result::Err(__e) => __e.into(),
+                            };
+                        }
                     }
                 }
             }
@@ -949,6 +1018,81 @@ pub fn instruction_raw(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         impl ::solzempic::InstructionRaw for #struct_name<'_> {
+            #(#methods)*
+        }
+
+        impl #struct_name<'_> {
+            /// Instruction name for IDL.
+            pub const IDL_NAME: &'static str = #struct_name_str;
+
+            /// Get params field metadata for IDL generation.
+            pub const IDL_PARAMS: &'static [::solzempic::ParamField] = <#params_type as ::solzempic::ParamsMeta>::FIELDS;
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+/// Attribute macro for maximum-efficiency single-function instruction impl blocks.
+///
+/// Generates `InstructionParams` and `InstructionRawUnsafe<N>` trait implementations.
+/// The impl block should contain a single `execute_unsafe` method receiving raw pointers.
+///
+/// `accounts = N` is **required** — it specifies the exact account count.
+///
+/// Use with `#[execute_only]`, `#[no_dup(N)]`, and `#[raw_unsafe]` on the enum variant
+/// in `SolzempicEntrypoint` to get a fully direct entrypoint that bypasses both
+/// account-view construction and the `process_instruction` dispatch match.
+///
+/// # Example
+///
+/// ```ignore
+/// #[instruction_raw_unsafe(MyParams, accounts = 4)]
+/// impl MyInstruction<'_> {
+///     unsafe fn execute_unsafe(
+///         program_id: &Address,
+///         accounts: [*mut pinocchio::account::RuntimeAccount; 4],
+///         params: &MyParams,
+///     ) -> ProgramResult {
+///         // All logic here — maximum efficiency, no wrapper overhead
+///         Ok(())
+///     }
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn instruction_raw_unsafe(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let (params_type, num_accounts) = parse_instruction_attr(attr);
+    let n = num_accounts.expect("instruction_raw_unsafe requires accounts = N (exact account count)");
+    let n_lit = proc_macro2::Literal::usize_unsuffixed(n);
+    let input = parse_macro_input!(item as ItemImpl);
+
+    let struct_type = &input.self_ty;
+    let struct_name = match struct_type.as_ref() {
+        syn::Type::Path(type_path) => &type_path.path.segments.last().unwrap().ident,
+        _ => panic!("instruction_raw_unsafe macro requires a struct type"),
+    };
+
+    let methods: Vec<_> = input
+        .items
+        .iter()
+        .filter_map(|item| {
+            if let ImplItem::Fn(method) = item {
+                Some(method)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let struct_name_str = struct_name.to_string();
+
+    let expanded = quote! {
+        impl ::solzempic::InstructionParams for #struct_name<'_> {
+            type Params = #params_type;
+            const REQUIRED_ACCOUNTS: usize = #n_lit;
+        }
+
+        impl ::solzempic::InstructionRawUnsafe<#n_lit> for #struct_name<'_> {
             #(#methods)*
         }
 
