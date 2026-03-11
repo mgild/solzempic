@@ -182,24 +182,25 @@ pub unsafe fn deserialize_no_dup<const MAX_ACCOUNTS: usize>(
     (program_id, processed, instruction_data)
 }
 
-/// Parse SVM input buffer into exactly `N` raw `RuntimeAccount` pointers, skipping the dup check.
+/// Parse N accounts from the SBF input buffer into raw `RuntimeAccount` pointers.
 ///
 /// Unlike [`deserialize_no_dup`], this returns raw pointers directly into the SBF input buffer
 /// rather than `AccountView` wrappers, and does not require an output array parameter.
-/// The caller MUST ensure the buffer contains exactly `N` non-duplicate accounts.
+///
+/// **`input` must point to the first account** (i.e. past the leading `num_accounts: u64`).
+/// The caller is responsible for advancing past that field before calling this function.
+/// This avoids a redundant pointer advance when the caller already read `num_accounts`.
 ///
 /// # Safety
 ///
-/// - `input` must be a valid SVM serialized input buffer.
+/// - `input` must point to the first serialized account in a valid SVM input buffer.
 /// - All account slots must be non-duplicate (`borrow_state == 0xFF`).
-/// - The `num_accounts` field in the buffer must be exactly `N`.
-///   Passing a buffer where the count differs is undefined behavior.
+/// - Exactly `N` non-duplicate accounts must follow at `input`.
 #[inline(always)]
 pub unsafe fn deserialize_no_dup_ptrs<const N: usize>(
     mut input: *mut u8,
 ) -> ([*mut RuntimeAccount; N], &'static Address, &'static [u8]) {
-    // Skip the account count u64 (caller already read it for the == N check).
-    input = input.add(size_of::<u64>());
+    // Note: input already points to the first account — no skip needed here.
 
     let mut ptrs = [core::ptr::null_mut::<RuntimeAccount>(); N];
     let mut i = 0;

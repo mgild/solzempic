@@ -600,13 +600,18 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
             if *is_raw_unsafe {
                 quote! {
                     if __n == #n_lit {
+                        // Pass input already advanced past the account count u64 to avoid
+                        // a redundant pointer add inside deserialize_no_dup_ptrs.
                         let (__ptrs, __pid, __data) = unsafe {
-                            ::solzempic::entrypoint_no_dup::deserialize_no_dup_ptrs::<#n_lit>(input)
+                            ::solzempic::entrypoint_no_dup::deserialize_no_dup_ptrs::<#n_lit>(
+                                input.add(::core::mem::size_of::<u64>()),
+                            )
                         };
-                        if __data.first().copied() == ::core::option::Option::Some(#disc as u8) {
-                            if __data.len() < 1 + ::core::mem::size_of::<<#name as ::solzempic::InstructionParams>::Params>() {
-                                return ::pinocchio::error::ProgramError::InvalidInstructionData.into();
-                            }
+                        // Single branch: check params length (covers discriminator byte too)
+                        // then read discriminator directly — avoids first()/Option overhead.
+                        if __data.len() >= 1 + ::core::mem::size_of::<<#name as ::solzempic::InstructionParams>::Params>()
+                            && unsafe { *__data.as_ptr() } == #disc as u8
+                        {
                             let __params = unsafe { *(__data.as_ptr().add(1) as *const <#name as ::solzempic::InstructionParams>::Params) };
                             return match unsafe { <#name<'_> as ::solzempic::InstructionRawUnsafe<#n_lit>>::execute_unsafe(__pid, __ptrs, &__params) } {
                                 ::core::result::Result::Ok(()) => ::pinocchio::SUCCESS,
