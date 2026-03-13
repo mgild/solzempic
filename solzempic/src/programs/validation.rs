@@ -104,7 +104,10 @@ macro_rules! define_validator {
 #[inline]
 pub fn validate_token_program(account: &AccountView) -> Result<(), ProgramError> {
     let key = account.address();
-    if !address_eq(key, &TOKEN_PROGRAM_ID) && !address_eq(key, &TOKEN_2022_PROGRAM_ID) {
+    if !address_eq(key, &TOKEN_PROGRAM_ID)
+        && !address_eq(key, &TOKEN_2022_PROGRAM_ID)
+        && !address_eq(key, &PTOKEN_PROGRAM_ID)
+    {
         return Err(ProgramError::IncorrectProgramId);
     }
     Ok(())

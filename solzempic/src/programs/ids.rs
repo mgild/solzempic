@@ -91,6 +91,15 @@ pub const TOKEN_2022_PROGRAM_ID: Address = Address::new_from_array(pinocchio_pub
     "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
 ));
 
+/// The Perena Token (PToken) Program ID.
+///
+/// PToken is a token program with an interface compatible with SPL Token.
+///
+/// Address: `ptok6rngomXrDbWf5v5Mkmu5CEbB51hzSCPDoj9DrvF`
+pub const PTOKEN_PROGRAM_ID: Address = Address::new_from_array(pinocchio_pubkey::pubkey!(
+    "ptok6rngomXrDbWf5v5Mkmu5CEbB51hzSCPDoj9DrvF"
+));
+
 /// The Associated Token Account (ATA) Program ID.
 ///
 /// The ATA program provides deterministic token account addresses:

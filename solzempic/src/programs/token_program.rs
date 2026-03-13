@@ -6,7 +6,7 @@
 use pinocchio::{error::ProgramError, AccountView};
 use solana_address::address_eq;
 
-use super::ids::{TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID};
+use super::ids::{PTOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID};
 use super::traits::{HasAccountView, ValidatedAccount};
 
 /// Validated SPL Token Program account wrapper.
@@ -72,7 +72,10 @@ impl<'a> ValidatedAccount<'a> for TokenProgram<'a> {
     #[inline]
     fn wrap(info: &'a AccountView) -> Result<Self, ProgramError> {
         let key = info.address();
-        if !address_eq(key, &TOKEN_PROGRAM_ID) && !address_eq(key, &TOKEN_2022_PROGRAM_ID) {
+        if !address_eq(key, &TOKEN_PROGRAM_ID)
+            && !address_eq(key, &TOKEN_2022_PROGRAM_ID)
+            && !address_eq(key, &PTOKEN_PROGRAM_ID)
+        {
             return Err(ProgramError::IncorrectProgramId);
         }
         Ok(Self { info })
@@ -122,5 +125,11 @@ impl<'a> TokenProgram<'a> {
     #[inline]
     pub fn is_token_2022(&self) -> bool {
         address_eq(self.info.address(), &TOKEN_2022_PROGRAM_ID)
+    }
+
+    /// Check if this is the PToken program.
+    #[inline]
+    pub fn is_ptoken(&self) -> bool {
+        address_eq(self.info.address(), &PTOKEN_PROGRAM_ID)
     }
 }

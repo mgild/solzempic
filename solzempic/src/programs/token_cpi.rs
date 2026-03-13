@@ -8,7 +8,9 @@ use solana_address::Address;
 
 pub use pinocchio::cpi::Seed;
 
-use super::ids::{ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID};
+use super::ids::{
+    ASSOCIATED_TOKEN_PROGRAM_ID, PTOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID,
+};
 use crate::AsAccountView;
 
 // ============================================================================
@@ -285,6 +287,18 @@ pub fn get_associated_token_address_22(owner: &Address, mint: &Address) -> Addre
     let seeds: &[&[u8]] = &[
         owner.as_ref(),
         TOKEN_2022_PROGRAM_ID.as_ref(),
+        mint.as_ref(),
+    ];
+    let (address, _bump) = Address::find_program_address(seeds, &ASSOCIATED_TOKEN_PROGRAM_ID);
+    address
+}
+
+/// Derive associated token account address for PToken
+#[inline]
+pub fn get_associated_token_address_ptoken(owner: &Address, mint: &Address) -> Address {
+    let seeds: &[&[u8]] = &[
+        owner.as_ref(),
+        PTOKEN_PROGRAM_ID.as_ref(),
         mint.as_ref(),
     ];
     let (address, _bump) = Address::find_program_address(seeds, &ASSOCIATED_TOKEN_PROGRAM_ID);

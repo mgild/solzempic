@@ -6,7 +6,7 @@
 use pinocchio::{error::ProgramError, AccountView};
 use solana_address::{address_eq, Address};
 
-use super::ids::{TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID};
+use super::ids::{PTOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID};
 use super::traits::{HasAccountView, HasAddress, ValidatedAccount};
 
 /// Validated SPL Token Mint account wrapper.
@@ -83,7 +83,10 @@ impl<'a> ValidatedAccount<'a> for Mint<'a> {
     #[inline]
     fn wrap(info: &'a AccountView) -> Result<Self, ProgramError> {
         let owner = unsafe { info.owner() };
-        if !address_eq(owner, &TOKEN_PROGRAM_ID) && !address_eq(owner, &TOKEN_2022_PROGRAM_ID) {
+        if !address_eq(owner, &TOKEN_PROGRAM_ID)
+            && !address_eq(owner, &TOKEN_2022_PROGRAM_ID)
+            && !address_eq(owner, &PTOKEN_PROGRAM_ID)
+        {
             return Err(ProgramError::IllegalOwner);
         }
 

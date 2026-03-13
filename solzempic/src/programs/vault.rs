@@ -9,7 +9,7 @@
 use pinocchio::{error::ProgramError, AccountView};
 use solana_address::{address_eq, Address};
 
-use super::ids::{SYSTEM_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID};
+use super::ids::{PTOKEN_PROGRAM_ID, SYSTEM_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID};
 use super::traits::HasAccountView;
 
 /// Vault token account with authority validation.
@@ -70,7 +70,10 @@ impl<'a> Vault<'a> {
     #[inline]
     pub fn wrap(info: &'a AccountView, expected_authority: &Address) -> Result<Self, ProgramError> {
         let owner = unsafe { info.owner() };
-        if !address_eq(owner, &TOKEN_PROGRAM_ID) && !address_eq(owner, &TOKEN_2022_PROGRAM_ID) {
+        if !address_eq(owner, &TOKEN_PROGRAM_ID)
+            && !address_eq(owner, &TOKEN_2022_PROGRAM_ID)
+            && !address_eq(owner, &PTOKEN_PROGRAM_ID)
+        {
             return Err(ProgramError::IllegalOwner);
         }
 
