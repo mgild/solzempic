@@ -1138,6 +1138,14 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
                 };
                 let shard_suffixes: &[&str] = match type_name.as_str() {
                     "ShardListRefMut" | "ShardListRef" => &["current", "next"],
+                    "MarketCtx" => &[
+                        "market", "prop_amm", "active_clmm",
+                        "dormant_clmm_bid_current", "dormant_clmm_bid_next",
+                        "dormant_clmm_ask_current", "dormant_clmm_ask_next",
+                        "limit_bid_current", "limit_bid_next",
+                        "limit_ask_current", "limit_ask_next",
+                        "trader_credit", "next_free_shard",
+                    ],
                     _ => &["low_shard", "current_shard", "high_shard"],
                 };
                 for (i, suffix) in shard_suffixes.iter().enumerate() {
@@ -1449,6 +1457,9 @@ fn analyze_field_type(ty: &Type) -> (bool, bool, bool, usize) {
                     // Shard list expands to 2 accounts (current/next)
                     "ShardListRefMut" => (false, true, false, 2), // writable
                     "ShardListRef" => (false, false, false, 2),   // read-only
+
+                    // Context groups — expand to N accounts
+                    "MarketCtx" => (false, true, false, 13), // 13 writable accounts
 
                     _ => (false, false, false, 1),
                 }
