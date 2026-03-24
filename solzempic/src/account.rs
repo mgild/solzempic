@@ -254,6 +254,13 @@ pub fn create_pda_account<'a>(
     space: usize,
     seeds: &[Seed],
 ) -> Result<(), ProgramError> {
+    // Skip CPI if the account is already program-owned with sufficient data.
+    // This handles accounts pre-allocated externally (e.g., >10KB accounts that
+    // exceed the per-CPI data growth limit and must be pre-created).
+    if new_account.owned_by(program_id) && new_account.data_len() >= space {
+        return Ok(());
+    }
+
     let lamports = rent_exempt_minimum(space);
 
     // CreateAccount instruction: discriminator 0u32 + lamports + space + owner

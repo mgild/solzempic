@@ -266,9 +266,8 @@ impl<'a, T: ShardListNode, F: Framework> ShardListRefMut<'a, T, F> {
         let current_ptr = self.current.data_mut() as *mut [u8];
 
         let next = match &mut self.next_ref {
-            NextRef::None => None,
+            NextRef::None | NextRef::AliasCurrent => None,
             NextRef::Owned(acct) => Some(acct.data_mut() as *mut [u8]),
-            NextRef::AliasCurrent => Some(current_ptr),
         };
 
         unsafe { (&mut *current_ptr, next.map(|p| &mut *p)) }
