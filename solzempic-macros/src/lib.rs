@@ -1144,8 +1144,9 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
                         "dormant_clmm_ask_current", "dormant_clmm_ask_next",
                         "limit_bid_current", "limit_bid_next",
                         "limit_ask_current", "limit_ask_next",
-                        "trader_credit", "next_free_shard",
+                        "trader_credit", "next_free_shard", "active_set",
                     ],
+                    "SysvarCtx" => &["clock", "last_restart_slot"],
                     _ => &["low_shard", "current_shard", "high_shard"],
                 };
                 for (i, suffix) in shard_suffixes.iter().enumerate() {
@@ -1459,7 +1460,8 @@ fn analyze_field_type(ty: &Type) -> (bool, bool, bool, usize) {
                     "ShardListRef" => (false, false, false, 2),   // read-only
 
                     // Context groups — expand to N accounts
-                    "MarketCtx" => (false, true, false, 13), // 13 writable accounts
+                    "MarketCtx" => (false, true, false, 14), // 14 writable accounts (incl. active_set)
+                    "SysvarCtx" => (false, false, false, 2), // 2 readonly sysvar accounts (clock + last_restart_slot)
 
                     _ => (false, false, false, 1),
                 }
