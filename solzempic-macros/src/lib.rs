@@ -1138,7 +1138,8 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
             let (is_signer, is_writable, is_program, expand_count) = analyze_field_type(field_ty);
 
             if expand_count > 1 {
-                // Determine suffixes based on type name
+                // Determine suffixes based on type name.
+                // Per-field (name, is_signer, is_writable, is_program).
                 let type_name = match field_ty {
                     Type::Path(type_path) => type_path
                         .path
@@ -1148,36 +1149,77 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
                         .unwrap_or_default(),
                     _ => String::new(),
                 };
-                let shard_suffixes: &[&str] = match type_name.as_str() {
-                    "ShardListRefMut" | "ShardListRef" => &["current", "next"],
+                let shard_fields: &[(&str, bool, bool, bool)] = match type_name.as_str() {
+                    "ShardListRefMut" => &[("current", false, true, false), ("next", false, true, false)],
+                    "ShardListRef" => &[("current", false, false, false), ("next", false, false, false)],
                     "MarketCtx" => &[
-                        "market", "prop_amm", "active_clmm",
-                        "dormant_clmm_bid_current", "dormant_clmm_bid_next",
-                        "dormant_clmm_ask_current", "dormant_clmm_ask_next",
-                        "limit_bid_current", "limit_bid_next",
-                        "limit_ask_current", "limit_ask_next",
-                        "trader_credit", "next_free_shard", "active_set",
+                        ("market", false, true, false),
+                        ("prop_amm", false, true, false),
+                        ("active_clmm", false, true, false),
+                        ("dormant_clmm_bid_current", false, true, false),
+                        ("dormant_clmm_bid_next", false, true, false),
+                        ("dormant_clmm_ask_current", false, true, false),
+                        ("dormant_clmm_ask_next", false, true, false),
+                        ("limit_bid_current", false, true, false),
+                        ("limit_bid_next", false, true, false),
+                        ("limit_ask_current", false, true, false),
+                        ("limit_ask_next", false, true, false),
+                        ("trader_credit", false, true, false),
+                        ("next_free_shard", false, true, false),
+                        ("active_set", false, true, false),
+                        ("scratch_buffer", false, true, false),
+                        ("perp_long_shards_current", false, true, false),
+                        ("perp_long_shards_next", false, true, false),
+                        ("perp_short_shards_current", false, true, false),
+                        ("perp_short_shards_next", false, true, false),
+                        ("scheduled_shards_current", false, true, false),
+                        ("scheduled_shards_next", false, true, false),
+                        ("funding_long_shards_current", false, true, false),
+                        ("funding_long_shards_next", false, true, false),
+                        ("funding_short_shards_current", false, true, false),
+                        ("funding_short_shards_next", false, true, false),
+                        ("price_history", false, true, false),
                     ],
-                    "SysvarCtx" => &["clock", "last_restart_slot"],
-                    _ => &["low_shard", "current_shard", "high_shard"],
+                    "SysvarCtx" => &[
+                        ("clock", false, false, false),
+                        ("last_restart_slot", false, false, false),
+                        ("system_program", false, false, true), // program
+                        ("instructions_sysvar", false, false, false),
+                        ("slot_hashes", false, false, false),
+                    ],
+                    "TraderCtx" => &[
+                        ("owner", true, false, false),       // signer
+                        ("trader", false, true, false),      // writable
+                        ("trader_market_state", false, true, false), // writable
+                    ],
+                    _ => &[
+                        ("low_shard", false, is_writable, false),
+                        ("current_shard", false, is_writable, false),
+                        ("high_shard", false, is_writable, false),
+                    ],
                 };
-                for (i, suffix) in shard_suffixes.iter().enumerate() {
+                for (i, (suffix, fld_signer, fld_writable, fld_program)) in shard_fields.iter().enumerate() {
                     let idx = current_idx + i;
                     let nested_name = format!("{}_{}", field_name_str, suffix);
+                    let fs = *fld_signer;
+                    let fw = *fld_writable;
+                    let fp = *fld_program;
                     account_metas.push(quote! {
                         ::solzempic::ShankAccountMeta {
                             index: #idx,
                             name: #nested_name,
-                            is_signer: false,
-                            is_writable: #is_writable,
-                            is_program: false,
+                            is_signer: #fs,
+                            is_writable: #fw,
+                            is_program: #fp,
                         }
                     });
+                    let mut attrs = Vec::new();
+                    if fw { attrs.push("writable"); }
+                    if fs { attrs.push("signer"); }
+                    let attrs_str = if attrs.is_empty() { String::new() } else { format!(", {}", attrs.join(", ")) };
                     shank_attr_strings.push(format!(
                         "#[account({}{}, name=\"{}\")]",
-                        idx,
-                        if is_writable { ", writable" } else { "" },
-                        nested_name
+                        idx, attrs_str, nested_name
                     ));
                 }
                 current_idx += expand_count;
@@ -1472,8 +1514,11 @@ fn analyze_field_type(ty: &Type) -> (bool, bool, bool, usize) {
                     "ShardListRef" => (false, false, false, 2),   // read-only
 
                     // Context groups — expand to N accounts
-                    "MarketCtx" => (false, true, false, 14), // 14 writable accounts (incl. active_set)
-                    "SysvarCtx" => (false, false, false, 2), // 2 readonly sysvar accounts (clock + last_restart_slot)
+                    // NOTE: These lists duplicate the struct definitions in the consuming crate.
+                    // See `#[group_fields(...)]` attribute below for a decoupled approach.
+                    "MarketCtx" => (false, true, false, 26), // 26 accounts (13 core + scratch + 4 perp/shards/funding pairs + price_history)
+                    "SysvarCtx" => (false, false, false, 5), // 5 accounts (clock, last_restart_slot, system_program, instructions, slot_hashes)
+                    "TraderCtx" => (false, true, false, 3), // 3 accounts (owner, trader, trader_market_state)
 
                     _ => (false, false, false, 1),
                 }
