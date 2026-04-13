@@ -355,6 +355,11 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
                 .attrs
                 .iter()
                 .any(|a| a.path().is_ident("raw_unsafe"));
+            // Parse #[raw_slice] — passes full data slice instead of typed params.
+            let is_raw_slice = variant
+                .attrs
+                .iter()
+                .any(|a| a.path().is_ident("raw_slice"));
             // Parse #[no_dup(N)] — N is the exact account count for the no-dup fast path.
             let no_dup_accounts: Option<usize> = variant.attrs.iter().find_map(|a| {
                 if a.path().is_ident("no_dup") {
@@ -366,7 +371,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
                     None
                 }
             });
-            (variant_name, disc_expr, accounts, is_execute_only, no_dup_accounts, is_raw_unsafe)
+            (variant_name, disc_expr, accounts, is_execute_only, no_dup_accounts, is_raw_unsafe, is_raw_slice)
         })
         .collect();
 
@@ -390,14 +395,14 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
         .collect();
 
     // Generate TryFrom<u8> match arms
-    let try_from_arms = variant_info.iter().map(|(name, disc, _, _, _, _)| {
+    let try_from_arms = variant_info.iter().map(|(name, disc, _, _, _, _, _)| {
         quote! { #disc => Ok(#enum_name::#name), }
     });
 
     // Generate process match arms — fully inlined dispatch that skips
     // Instruction::process and parse_params, avoiding redundant slice/length ops.
     // When REQUIRED_ACCOUNTS is defined, auto-checks accounts.len() before dispatch.
-    let process_arms = variant_info.iter().map(|(name, disc, _, is_execute_only, no_dup_accounts, is_raw_unsafe)| {
+    let process_arms = variant_info.iter().map(|(name, disc, _, is_execute_only, no_dup_accounts, is_raw_unsafe, is_raw_slice)| {
         // Account length check — uses REQUIRED_ACCOUNTS from InstructionParams trait.
         // When REQUIRED_ACCOUNTS is 0 (default), the compiler eliminates this branch entirely.
         let accounts_check = quote! {
@@ -429,6 +434,13 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
                     }
                 },
             }
+        } else if *is_raw_slice {
+            quote! {
+                #disc => {
+                    #accounts_check
+                    <#name as ::solzempic::InstructionRawSlice>::execute_raw_slice(program_id, accounts, &data[1..])
+                },
+            }
         } else if *is_execute_only {
             quote! {
                 #disc => {
@@ -457,7 +469,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
     });
 
     // Generate IDL metadata entries
-    let idl_entries = variant_info.iter().map(|(name, disc, _, _, _, _)| {
+    let idl_entries = variant_info.iter().map(|(name, disc, _, _, _, _, _)| {
         quote! {
             ::solzempic::InstructionMeta {
                 name: #name::IDL_NAME,
@@ -469,7 +481,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
     });
 
     // Generate variant definitions for the enum
-    let variant_defs = variant_info.iter().map(|(name, disc, _accounts, _, _, _)| {
+    let variant_defs = variant_info.iter().map(|(name, disc, _accounts, _, _, _, _)| {
         quote! {
             #name = #disc
         }
@@ -486,7 +498,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
 
     // Generate Shank-compatible IDL instruction metadata for each variant
     // This replaces what ShankInstruction derive would generate
-    let shank_instruction_metas = variant_info.iter().map(|(name, disc, accounts, _, _, _)| {
+    let shank_instruction_metas = variant_info.iter().map(|(name, disc, accounts, _, _, _, _)| {
         let name_str = name.to_string();
         // Convert PascalCase to snake_case for module name
         let mod_name_str = to_snake_case(&name_str);
@@ -543,7 +555,7 @@ pub fn SolzempicEntrypoint(attr: TokenStream, item: TokenStream) -> TokenStream 
     // Tuple: (discriminator_expr, account_count, variant_name, is_raw_unsafe)
     let no_dup_variants: Vec<(&syn::Expr, usize, &syn::Ident, bool)> = variant_info
         .iter()
-        .filter_map(|(name, disc, _, _, no_dup_accounts, is_raw_unsafe)| {
+        .filter_map(|(name, disc, _, _, no_dup_accounts, is_raw_unsafe, _)| {
             no_dup_accounts.map(|n| (*disc, n, *name, *is_raw_unsafe))
         })
         .collect();

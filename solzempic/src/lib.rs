@@ -533,6 +533,23 @@ pub trait InstructionRawUnsafe<const N: usize>: InstructionParams {
     ) -> ProgramResult;
 }
 
+/// Single-function instruction that receives the full raw instruction data slice.
+///
+/// Use this when the instruction has variable-length data that can't be
+/// represented as a fixed-size `#[repr(C)]` params struct (e.g., proof upload
+/// with a variable-length payload after a fixed header).
+///
+/// Mark the corresponding enum variant with `#[execute_only]` and `#[raw_slice]`
+/// in `SolzempicEntrypoint`.
+pub trait InstructionRawSlice {
+    /// Execute the instruction with the full raw data slice (after discriminator byte).
+    fn execute_raw_slice(
+        program_id: &Address,
+        accounts: &[AccountView],
+        data: &[u8],
+    ) -> ProgramResult;
+}
+
 /// Parse instruction parameters from raw bytes using zero-copy.
 ///
 /// This function performs a zero-copy cast from the instruction data bytes
