@@ -1101,8 +1101,13 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
         _ => panic!("instruction macro on struct only supports named fields"),
     };
 
-    // Analyze each field and determine account constraints
-    let mut account_metas: Vec<proc_macro2::TokenStream> = Vec::new();
+    // Per-field collection for const-fn builder output.
+    //   account_count_terms: tokens summing to NUM_ACCOUNTS (mix of literals
+    //                        and <T as AccountGroup>::ACCOUNT_COUNT for #[group] fields)
+    //   build_stmts:         const-fn statements populating SHANK_ACCOUNTS
+    //   shank_attr_strings:  Rust doc strings for `shank_accounts()` helper
+    let mut account_count_terms: Vec<proc_macro2::TokenStream> = Vec::new();
+    let mut build_stmts: Vec<proc_macro2::TokenStream> = Vec::new();
     let mut shank_attr_strings: Vec<String> = Vec::new();
     let mut current_idx = start_index;
 
@@ -1111,22 +1116,57 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
         let field_name_str = field_name.to_string();
         let field_ty = &field.ty;
 
-        // Check for #[group(N)] attribute first — overrides analyze_field_type
-        let group_count = extract_group_count(&field.attrs);
+        // `#[group]` (no args) — trait-based expansion via AccountGroup::FIELD_METADATA.
+        // The count isn't known at macro time — it comes from the type's
+        // associated const at const-eval time. Use 'static lifetime for the
+        // trait bound (metadata is 'static so this is always sound).
+        if has_group_attr(&field.attrs) {
+            let ty_static = strip_lifetimes_to_static(field_ty);
+            account_count_terms.push(quote! {
+                <#ty_static as ::solzempic::AccountGroup<'static>>::ACCOUNT_COUNT
+            });
+            build_stmts.push(quote! {
+                {
+                    let __g = <#ty_static as ::solzempic::AccountGroup<'static>>::FIELD_METADATA;
+                    let mut __i: usize = 0;
+                    while __i < __g.len() {
+                        __arr[__idx] = ::solzempic::ShankAccountMeta {
+                            index: __idx,
+                            name: __g[__i].name,
+                            is_signer: __g[__i].is_signer,
+                            is_writable: __g[__i].is_writable,
+                            is_program: __g[__i].is_program,
+                        };
+                        __idx += 1;
+                        __i += 1;
+                    }
+                }
+            });
+            // #[group] fields emit no static doc string — the type's derive
+            // documents its own fields.
+            shank_attr_strings.push(format!(
+                "// #[group] {}: <{}>::FIELD_METADATA",
+                field_name_str,
+                quote!(#field_ty).to_string()
+            ));
+            continue;
+        }
 
-        if let Some(n) = group_count {
-            // Account group: generate N writable account metas named {field}_{0} .. {field}_{N-1}
+        // Check for #[group(N)] attribute — N generic writable accounts.
+        if let Some(n) = extract_group_count(&field.attrs) {
+            account_count_terms.push(quote! { #n });
             for i in 0..n {
                 let idx = current_idx + i;
                 let nested_name = format!("{}_{}", field_name_str, i);
-                account_metas.push(quote! {
-                    ::solzempic::ShankAccountMeta {
-                        index: #idx,
+                build_stmts.push(quote! {
+                    __arr[__idx] = ::solzempic::ShankAccountMeta {
+                        index: __idx,
                         name: #nested_name,
                         is_signer: false,
                         is_writable: true,
                         is_program: false,
-                    }
+                    };
+                    __idx += 1;
                 });
                 shank_attr_strings.push(format!(
                     "#[account({}, writable, name=\"{}\")]",
@@ -1134,137 +1174,116 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
                 ));
             }
             current_idx += n;
-        } else {
-            let (is_signer, is_writable, is_program, expand_count) = analyze_field_type(field_ty);
+            continue;
+        }
 
-            if expand_count > 1 {
-                // Determine suffixes based on type name.
-                // Per-field (name, is_signer, is_writable, is_program).
-                let type_name = match field_ty {
-                    Type::Path(type_path) => type_path
-                        .path
-                        .segments
-                        .last()
-                        .map(|s| s.ident.to_string())
-                        .unwrap_or_default(),
-                    _ => String::new(),
-                };
-                let shard_fields: &[(&str, bool, bool, bool)] = match type_name.as_str() {
-                    "ShardListRefMut" => &[("current", false, true, false), ("next", false, true, false)],
-                    "ShardListRef" => &[("current", false, false, false), ("next", false, false, false)],
-                    "MarketCtx" => &[
-                        ("market", false, true, false),
-                        ("prop_amm", false, true, false),
-                        ("active_clmm", false, true, false),
-                        ("dormant_clmm_bid_current", false, true, false),
-                        ("dormant_clmm_bid_next", false, true, false),
-                        ("dormant_clmm_ask_current", false, true, false),
-                        ("dormant_clmm_ask_next", false, true, false),
-                        ("limit_bid_current", false, true, false),
-                        ("limit_bid_next", false, true, false),
-                        ("limit_ask_current", false, true, false),
-                        ("limit_ask_next", false, true, false),
-                        ("trader_credit", false, true, false),
-                        ("next_free_shard", false, true, false),
-                        ("active_set", false, true, false),
-                        ("scratch_buffer", false, true, false),
-                        ("perp_long_shards_current", false, true, false),
-                        ("perp_long_shards_next", false, true, false),
-                        ("perp_short_shards_current", false, true, false),
-                        ("perp_short_shards_next", false, true, false),
-                        ("scheduled_shards_current", false, true, false),
-                        ("scheduled_shards_next", false, true, false),
-                        ("funding_long_shards_current", false, true, false),
-                        ("funding_long_shards_next", false, true, false),
-                        ("funding_short_shards_current", false, true, false),
-                        ("funding_short_shards_next", false, true, false),
-                        ("price_history", false, true, false),
-                    ],
-                    "SysvarCtx" => &[
-                        ("clock", false, false, false),
-                        ("last_restart_slot", false, false, false),
-                        ("system_program", false, false, true), // program
-                        ("instructions_sysvar", false, false, false),
-                        ("slot_hashes", false, false, false),
-                    ],
-                    "TraderCtx" => &[
-                        ("owner", true, false, false),       // signer
-                        ("trader", false, true, false),      // writable
-                        ("trader_market_state", false, true, false), // writable
-                    ],
-                    _ => &[
-                        ("low_shard", false, is_writable, false),
-                        ("current_shard", false, is_writable, false),
-                        ("high_shard", false, is_writable, false),
-                    ],
-                };
-                for (i, (suffix, fld_signer, fld_writable, fld_program)) in shard_fields.iter().enumerate() {
-                    let idx = current_idx + i;
-                    let nested_name = format!("{}_{}", field_name_str, suffix);
-                    let fs = *fld_signer;
-                    let fw = *fld_writable;
-                    let fp = *fld_program;
-                    account_metas.push(quote! {
-                        ::solzempic::ShankAccountMeta {
-                            index: #idx,
-                            name: #nested_name,
-                            is_signer: #fs,
-                            is_writable: #fw,
-                            is_program: #fp,
-                        }
-                    });
-                    let mut attrs = Vec::new();
-                    if fw { attrs.push("writable"); }
-                    if fs { attrs.push("signer"); }
-                    let attrs_str = if attrs.is_empty() { String::new() } else { format!(", {}", attrs.join(", ")) };
-                    shank_attr_strings.push(format!(
-                        "#[account({}{}, name=\"{}\")]",
-                        idx, attrs_str, nested_name
-                    ));
-                }
-                current_idx += expand_count;
-            } else {
-                let mut constraints = Vec::new();
-                if is_writable {
-                    constraints.push("writable");
-                }
-                if is_signer {
-                    constraints.push("signer");
-                }
+        // Type inference via analyze_field_type.
+        let (is_signer, is_writable, is_program, expand_count) = analyze_field_type(field_ty);
 
-                let constraints_str = if constraints.is_empty() {
-                    String::new()
-                } else {
-                    format!(", {}", constraints.join(", "))
-                };
-
+        if expand_count > 1 {
+            // Built-in multi-account types (ShardListRef{,Mut}, ShardRef{,Mut}Context).
+            let type_name = match field_ty {
+                Type::Path(type_path) => type_path
+                    .path
+                    .segments
+                    .last()
+                    .map(|s| s.ident.to_string())
+                    .unwrap_or_default(),
+                _ => String::new(),
+            };
+            let shard_fields: Vec<(&str, bool, bool, bool)> = match type_name.as_str() {
+                "ShardListRefMut" => vec![("current", false, true, false), ("next", false, true, false)],
+                "ShardListRef" => vec![("current", false, false, false), ("next", false, false, false)],
+                "ShardRefContext" => vec![
+                    ("low", false, false, false),
+                    ("current", false, false, false),
+                    ("high", false, false, false),
+                ],
+                "ShardRefMutContext" => vec![
+                    ("low", false, true, false),
+                    ("current", false, true, false),
+                    ("high", false, true, false),
+                ],
+                _ => panic!(
+                    "#[instruction]: field `{}` type `{}` has unknown multi-account expansion. \
+                     User-defined account groups must be marked `#[group]` and their type must \
+                     `#[derive(AccountGroupFields)]`.",
+                    field_name_str, type_name
+                ),
+            };
+            account_count_terms.push(quote! { #expand_count });
+            for (i, (suffix, fld_signer, fld_writable, fld_program)) in shard_fields.iter().enumerate() {
+                let idx = current_idx + i;
+                let nested_name = format!("{}_{}", field_name_str, suffix);
+                let fs = *fld_signer;
+                let fw = *fld_writable;
+                let fp = *fld_program;
+                build_stmts.push(quote! {
+                    __arr[__idx] = ::solzempic::ShankAccountMeta {
+                        index: __idx,
+                        name: #nested_name,
+                        is_signer: #fs,
+                        is_writable: #fw,
+                        is_program: #fp,
+                    };
+                    __idx += 1;
+                });
+                let mut attrs = Vec::new();
+                if fw { attrs.push("writable"); }
+                if fs { attrs.push("signer"); }
+                let attrs_str = if attrs.is_empty() { String::new() } else { format!(", {}", attrs.join(", ")) };
                 shank_attr_strings.push(format!(
                     "#[account({}{}, name=\"{}\")]",
-                    current_idx, constraints_str, field_name_str
+                    idx, attrs_str, nested_name
                 ));
-
-                account_metas.push(quote! {
-                    ::solzempic::ShankAccountMeta {
-                        index: #current_idx,
-                        name: #field_name_str,
-                        is_signer: #is_signer,
-                        is_writable: #is_writable,
-                        is_program: #is_program,
-                    }
-                });
-                current_idx += 1;
             }
-        } // close group_count else
+            current_idx += expand_count;
+            let _ = is_signer; let _ = is_writable; let _ = is_program;
+        } else {
+            // Single-account field.
+            account_count_terms.push(quote! { 1usize });
+            let mut constraints = Vec::new();
+            if is_writable { constraints.push("writable"); }
+            if is_signer { constraints.push("signer"); }
+            let constraints_str = if constraints.is_empty() {
+                String::new()
+            } else {
+                format!(", {}", constraints.join(", "))
+            };
+            shank_attr_strings.push(format!(
+                "#[account({}{}, name=\"{}\")]",
+                current_idx, constraints_str, field_name_str
+            ));
+            build_stmts.push(quote! {
+                __arr[__idx] = ::solzempic::ShankAccountMeta {
+                    index: __idx,
+                    name: #field_name_str,
+                    is_signer: #is_signer,
+                    is_writable: #is_writable,
+                    is_program: #is_program,
+                };
+                __idx += 1;
+            });
+            current_idx += 1;
+        }
     }
 
-    let num_accounts = account_metas.len();
     let shank_output = shank_attr_strings.join("\n    ");
+
+    // NUM_ACCOUNTS as sum of per-field count terms.
+    let num_accounts_expr = if account_count_terms.is_empty() {
+        quote! { 0usize }
+    } else {
+        quote! { #(#account_count_terms)+* }
+    };
+
+    let start_idx_tok = quote! { #start_index };
 
     let field_defs = fields.iter().map(|f| {
         let field_name = &f.ident;
         let field_ty = &f.ty;
         let field_vis = &f.vis;
-        // Filter out #[group(N)] attributes so they don't appear in struct output
+        // Filter out solzempic-internal attributes so they don't appear on the struct.
         let field_attrs: Vec<_> = f
             .attrs
             .iter()
@@ -1283,11 +1302,17 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
         }
 
         impl #struct_name<'_> {
-            pub const NUM_ACCOUNTS: usize = #num_accounts;
+            pub const NUM_ACCOUNTS: usize = #num_accounts_expr;
 
-            pub const SHANK_ACCOUNTS: [::solzempic::ShankAccountMeta; #num_accounts] = [
-                #(#account_metas),*
-            ];
+            pub const SHANK_ACCOUNTS: [::solzempic::ShankAccountMeta;
+                { #num_accounts_expr }] = {
+                const N: usize = { #num_accounts_expr };
+                let mut __arr = [::solzempic::ShankAccountMeta::PLACEHOLDER; N];
+                let mut __idx: usize = #start_idx_tok;
+                #(#build_stmts)*
+                let _ = __idx; // silence "unused assignment" on last += 1
+                __arr
+            };
 
             pub fn shank_accounts() -> &'static str {
                 #shank_output
@@ -1405,6 +1430,109 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
 /// - `#[account(discriminator = N)]` attribute is missing
 /// - Applied to non-struct (enum, union)
 /// - Struct has unnamed fields (tuple struct)
+/// Derive macro for account groups.
+///
+/// Generates inherent `FIELD_COUNT` and `FIELD_METADATA` consts on the struct
+/// by analyzing each field's type. Users then reference these in their
+/// hand-written `AccountGroup` trait impl:
+///
+/// ```ignore
+/// #[derive(AccountGroupFields)]
+/// pub struct MarketCtx<'a> {
+///     pub market: AccountRefMut<'a, Market>,
+///     pub shards: ShardListRefMut<'a, OrderShardHeader>,  // expands to 2
+/// }
+///
+/// impl<'a> AccountGroup<'a> for MarketCtx<'a> {
+///     const ACCOUNT_COUNT: usize = Self::FIELD_COUNT;
+///     const FIELD_METADATA: &'static [AccountGroupField] = Self::FIELD_METADATA;
+///     fn load(accounts: &'a [AccountView]) -> Result<Self, ProgramError> { /* ... */ }
+/// }
+/// ```
+///
+/// `ShardListRef{,Mut}` fields expand to 2 entries suffixed `_current`/`_next`.
+/// `ShardRef{,Mut}Context` fields expand to 3 entries suffixed `_low`/`_current`/`_high`.
+#[proc_macro_derive(AccountGroupFields)]
+pub fn derive_account_group_fields(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as ItemStruct);
+    let name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    let fields = match &input.fields {
+        Fields::Named(fields_named) => &fields_named.named,
+        _ => panic!("AccountGroupFields derive only supports structs with named fields"),
+    };
+
+    let mut meta_entries: Vec<proc_macro2::TokenStream> = Vec::new();
+    let mut total_count: usize = 0;
+
+    for field in fields {
+        let field_name = field.ident.as_ref().expect("Named field required");
+        let field_name_str = field_name.to_string();
+        let field_ty = &field.ty;
+
+        let (is_signer, is_writable, is_program, expand_count) = analyze_field_type(field_ty);
+
+        if expand_count > 1 {
+            let type_name = match field_ty {
+                Type::Path(type_path) => type_path
+                    .path
+                    .segments
+                    .last()
+                    .map(|s| s.ident.to_string())
+                    .unwrap_or_default(),
+                _ => String::new(),
+            };
+            let suffixes: &[&str] = match type_name.as_str() {
+                "ShardListRefMut" | "ShardListRef" => &["current", "next"],
+                "ShardRefContext" | "ShardRefMutContext" => &["low", "current", "high"],
+                _ => panic!(
+                    "AccountGroupFields: field `{}` type `{}` has unknown multi-account expansion.",
+                    field_name_str, type_name
+                ),
+            };
+            for suffix in suffixes {
+                let full = format!("{}_{}", field_name_str, suffix);
+                meta_entries.push(quote! {
+                    ::solzempic::AccountGroupField {
+                        name: #full,
+                        is_signer: #is_signer,
+                        is_writable: #is_writable,
+                        is_program: #is_program,
+                    }
+                });
+                total_count += 1;
+            }
+        } else {
+            meta_entries.push(quote! {
+                ::solzempic::AccountGroupField {
+                    name: #field_name_str,
+                    is_signer: #is_signer,
+                    is_writable: #is_writable,
+                    is_program: #is_program,
+                }
+            });
+            total_count += 1;
+        }
+    }
+
+    let expanded = quote! {
+        impl #impl_generics #name #ty_generics #where_clause {
+            /// Total account slots in this group (computed from field types).
+            /// Reference this in your `AccountGroup` impl's `ACCOUNT_COUNT`.
+            pub const DERIVED_FIELD_COUNT: usize = #total_count;
+
+            /// Per-field metadata for IDL generation (computed from field types).
+            /// Reference this in your `AccountGroup` impl's `FIELD_METADATA`.
+            pub const DERIVED_FIELD_METADATA: &'static [::solzempic::AccountGroupField] = &[
+                #(#meta_entries),*
+            ];
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
 #[proc_macro_derive(Account, attributes(account))]
 pub fn derive_account(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -1513,13 +1641,10 @@ fn analyze_field_type(ty: &Type) -> (bool, bool, bool, usize) {
                     "ShardListRefMut" => (false, true, false, 2), // writable
                     "ShardListRef" => (false, false, false, 2),   // read-only
 
-                    // Context groups — expand to N accounts
-                    // NOTE: These lists duplicate the struct definitions in the consuming crate.
-                    // See `#[group_fields(...)]` attribute below for a decoupled approach.
-                    "MarketCtx" => (false, true, false, 26), // 26 accounts (13 core + scratch + 4 perp/shards/funding pairs + price_history)
-                    "SysvarCtx" => (false, false, false, 5), // 5 accounts (clock, last_restart_slot, system_program, instructions, slot_hashes)
-                    "TraderCtx" => (false, true, false, 3), // 3 accounts (owner, trader, trader_market_state)
-
+                    // User-defined account groups: mark the field with
+                    // `#[group]` (no args) and `#[derive(AccountGroupFields)]`
+                    // on the type. The `#[instruction]` macro expands via
+                    // `<T as AccountGroup>::FIELD_METADATA` at const-eval time.
                     _ => (false, false, false, 1),
                 }
             } else {
@@ -1709,6 +1834,56 @@ fn extract_group_count(attrs: &[syn::Attribute]) -> Option<usize> {
         }
     }
     None
+}
+
+/// Check whether a field is marked with `#[group]` (no arguments).
+///
+/// This signals that the field's type implements `AccountGroup` with
+/// populated `FIELD_METADATA` (typically via `#[derive(AccountGroupFields)]`),
+/// and the `#[instruction]` macro should expand the field at const-eval time.
+fn has_group_attr(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        attr.path().is_ident("group") && matches!(attr.meta, syn::Meta::Path(_))
+    })
+}
+
+/// Replace all lifetimes in a type with `'static`.
+///
+/// Used to reference generic types in const context where the instruction's
+/// own lifetime parameter isn't in scope. `AccountGroup` metadata is `'static`
+/// so `<T<'static> as AccountGroup<'static>>` is always sound.
+fn strip_lifetimes_to_static(ty: &Type) -> proc_macro2::TokenStream {
+    use proc_macro2::{Literal, Punct, Spacing, TokenTree};
+    // Walk the token stream and replace any lifetime with `'static`.
+    // Lifetimes appear as a Punct(''') followed by an Ident.
+    fn walk(ts: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+        let mut out = proc_macro2::TokenStream::new();
+        let mut iter = ts.into_iter().peekable();
+        while let Some(tt) = iter.next() {
+            match tt {
+                TokenTree::Punct(p) if p.as_char() == '\'' && p.spacing() == Spacing::Joint => {
+                    // Next is the lifetime identifier — replace with 'static.
+                    if iter.peek().map(|t| matches!(t, TokenTree::Ident(_))).unwrap_or(false) {
+                        let _ = iter.next(); // consume the lifetime name
+                        out.extend(quote::quote! { 'static });
+                    } else {
+                        out.extend(std::iter::once(TokenTree::Punct(p)));
+                    }
+                }
+                TokenTree::Group(g) => {
+                    let new = walk(g.stream());
+                    out.extend(std::iter::once(TokenTree::Group(
+                        proc_macro2::Group::new(g.delimiter(), new),
+                    )));
+                }
+                other => out.extend(std::iter::once(other)),
+            }
+        }
+        let _ = Literal::u8_unsuffixed(0); // keep import used
+        out
+    }
+    let raw = quote::quote! { #ty };
+    walk(raw)
 }
 
 /// Extract discriminator value from `#[account(discriminator = N)]` attribute.

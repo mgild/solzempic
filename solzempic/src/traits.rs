@@ -295,8 +295,32 @@ pub trait AccountGroup<'a>: Sized {
     /// Number of account slots this group occupies in the instruction.
     const ACCOUNT_COUNT: usize;
 
+    /// Per-field metadata for IDL generation (name, signer, writable, program).
+    ///
+    /// Length must equal `ACCOUNT_COUNT`. Populated automatically by
+    /// `#[derive(AccountGroupFields)]`; default empty for backwards compat.
+    const FIELD_METADATA: &'static [crate::AccountGroupField] = &[];
+
     /// Load the group from a contiguous slice of account views.
     fn load(accounts: &'a [pinocchio::AccountView]) -> Result<Self, ProgramError>;
+}
+
+/// Metadata for one account within an `AccountGroup`.
+///
+/// Used by the `#[instruction]` macro to emit per-field entries in the IDL
+/// when a field is marked with `#[group]`. Populated automatically by
+/// `#[derive(AccountGroupFields)]` or provided manually in an
+/// `impl AccountGroup` block.
+#[derive(Clone, Copy, Debug)]
+pub struct AccountGroupField {
+    /// Field name (no prefix — used directly in IDL output).
+    pub name: &'static str,
+    /// Must be a signer.
+    pub is_signer: bool,
+    /// Must be writable.
+    pub is_writable: bool,
+    /// Is a program account (not a data account).
+    pub is_program: bool,
 }
 
 /// Trait for account types that can construct a PDA from a tuple.

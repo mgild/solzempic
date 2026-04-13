@@ -215,8 +215,8 @@ pub use wrappers::{
 
 // Re-export core traits
 pub use traits::{
-    check_discriminator, Account, AccountGroup, FromTuplePda, Initializable, Loadable, Pda,
-    PdaBase, PdaSeeds,
+    check_discriminator, Account, AccountGroup, AccountGroupField, FromTuplePda, Initializable,
+    Loadable, Pda, PdaBase, PdaSeeds,
 };
 
 // Re-export event types
@@ -224,8 +224,8 @@ pub use event::{emit_event, Event, EventFieldMeta, EventIdlMeta, EventMeta};
 
 // Re-export derive macros (Account derive renamed to avoid conflict with Account trait)
 pub use solzempic_macros::{
-    account, event, instruction, instruction_raw, instruction_raw_unsafe, params, Account as AccountDerive,
-    SolzempicEntrypoint,
+    account, event, instruction, instruction_raw, instruction_raw_unsafe, params,
+    Account as AccountDerive, AccountGroupFields, SolzempicEntrypoint,
 };
 
 /// Declare a program entrypoint that skips the per-account duplicate check.
@@ -703,6 +703,20 @@ pub struct ShankAccountMeta {
     pub is_writable: bool,
     /// Whether this account is a program account.
     pub is_program: bool,
+}
+
+impl ShankAccountMeta {
+    /// Placeholder entry used to initialize fixed-size arrays in const context.
+    ///
+    /// Populated with zero index and empty name; intended to be overwritten
+    /// by the `#[instruction]` macro's const-fn builder.
+    pub const PLACEHOLDER: Self = Self {
+        index: 0,
+        name: "",
+        is_signer: false,
+        is_writable: false,
+        is_program: false,
+    };
 }
 
 #[cfg(feature = "idl")]
