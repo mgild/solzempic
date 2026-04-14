@@ -18,3 +18,13 @@ proc-macro2.workspace = true
 quote.workspace = true
 syn.workspace = true
 sha2 = "0.10"
+
+[dev-dependencies]
+# trybuild runs `tests/pass/*.rs` and `tests/fail/*.rs` fixtures as separate
+# compiler invocations to verify the macros expand correctly (pass cases) and
+# produce actionable errors for misuse (fail cases).
+trybuild = "1"
+solzempic = { path = "../solzempic" }
+bytemuck = { workspace = true }
+pinocchio = { workspace = true }
+solana-address = { workspace = true }

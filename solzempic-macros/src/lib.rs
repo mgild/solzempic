@@ -1109,6 +1109,12 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
     let mut account_count_terms: Vec<proc_macro2::TokenStream> = Vec::new();
     let mut build_stmts: Vec<proc_macro2::TokenStream> = Vec::new();
     let mut shank_attr_strings: Vec<String> = Vec::new();
+    // Per-`#[group]`-field compile-time assertion snippets. Emitted before the
+    // main impl block so that missing `#[derive(AccountGroupFields)]` / missing
+    // `impl AccountGroup` produces a trait-bound error at a clean named
+    // location (`__SOLZEMPIC_GROUP_CHECK_<field>`) instead of inside a deeply
+    // nested const expression.
+    let mut group_assert_items: Vec<proc_macro2::TokenStream> = Vec::new();
     let mut current_idx = start_index;
 
     for field in fields.iter() {
@@ -1122,6 +1128,41 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
         // trait bound (metadata is 'static so this is always sound).
         if has_group_attr(&field.attrs) {
             let ty_static = strip_lifetimes_to_static(field_ty);
+
+            // Emit a named const assertion so that if the user forgot to
+            // `#[derive(AccountGroupFields)]` or `impl AccountGroup<'_>` on
+            // `#field_ty`, the compiler error points at this line instead of
+            // at the deeply nested const expression below. The const's name
+            // embeds the struct + field name so the diagnostic is actionable
+            // (e.g. `trait bound `MyCtx: AccountGroup<'_>` is not satisfied
+            // --> the const named __SOLZEMPIC_GROUP_CHECK_MyInstr_market`).
+            //
+            // Hint for users reading the error:
+            //   the type marked `#[group]` must satisfy:
+            //     #[derive(solzempic::AccountGroupFields)]
+            //     impl<'a> solzempic::AccountGroup<'a> for YourType<'a> { ... }
+            let check_ident = syn::Ident::new(
+                &format!(
+                    "__SOLZEMPIC_GROUP_CHECK_{}_{}",
+                    struct_name, field_name
+                ),
+                field_name.span(),
+            );
+            let field_ty_str = quote!(#field_ty).to_string();
+            let hint_msg = format!(
+                "`#[group]` field `{}: {}` requires the type to implement \
+                 `solzempic::AccountGroup<'_>`. Add \
+                 `#[derive(solzempic::AccountGroupFields)]` and an \
+                 `impl<'a> AccountGroup<'a>` block for the type.",
+                field_name, field_ty_str
+            );
+            group_assert_items.push(quote! {
+                #[doc = #hint_msg]
+                #[allow(non_upper_case_globals, dead_code)]
+                const #check_ident: usize =
+                    <#ty_static as ::solzempic::AccountGroup<'static>>::ACCOUNT_COUNT;
+            });
+
             account_count_terms.push(quote! {
                 <#ty_static as ::solzempic::AccountGroup<'static>>::ACCOUNT_COUNT
             });
@@ -1178,7 +1219,14 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
         }
 
         // Type inference via analyze_field_type.
-        let (is_signer, is_writable, is_program, expand_count) = analyze_field_type(field_ty);
+        let (is_signer, mut is_writable, is_program, expand_count) = analyze_field_type(field_ty);
+
+        // `#[writable]` attribute overrides readonly classification for bare
+        // `&'a AccountView` / `&'a [AccountView]` fields (written via
+        // `borrow_unchecked_mut()` on-chain).
+        if has_writable_attr(&field.attrs) {
+            is_writable = true;
+        }
 
         if expand_count > 1 {
             // Built-in multi-account types (ShardListRef{,Mut}, ShardRef{,Mut}Context).
@@ -1287,7 +1335,7 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
         let field_attrs: Vec<_> = f
             .attrs
             .iter()
-            .filter(|a| !a.path().is_ident("group"))
+            .filter(|a| !a.path().is_ident("group") && !a.path().is_ident("writable"))
             .collect();
         quote! {
             #(#field_attrs)*
@@ -1300,6 +1348,13 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
         #vis struct #struct_name #generics {
             #(#field_defs),*
         }
+
+        // Per-`#[group]`-field compile-time trait-bound asserts. If a field
+        // type doesn't implement `AccountGroup` (missing
+        // `#[derive(AccountGroupFields)]` or missing `impl AccountGroup`),
+        // the error is anchored here with a named `__SOLZEMPIC_GROUP_CHECK_*`
+        // const so the diagnostic clearly identifies the struct + field.
+        #(#group_assert_items)*
 
         impl #struct_name<'_> {
             pub const NUM_ACCOUNTS: usize = #num_accounts_expr;
@@ -1471,7 +1526,13 @@ pub fn derive_account_group_fields(input: TokenStream) -> TokenStream {
         let field_name_str = field_name.to_string();
         let field_ty = &field.ty;
 
-        let (is_signer, is_writable, is_program, expand_count) = analyze_field_type(field_ty);
+        let (is_signer, mut is_writable, is_program, expand_count) = analyze_field_type(field_ty);
+
+        // `#[writable]` attribute overrides readonly classification for bare
+        // `&'a AccountView` fields written via `borrow_unchecked_mut()`.
+        if has_writable_attr(&field.attrs) {
+            is_writable = true;
+        }
 
         if expand_count > 1 {
             let type_name = match field_ty {
@@ -1844,6 +1905,18 @@ fn extract_group_count(attrs: &[syn::Attribute]) -> Option<usize> {
 fn has_group_attr(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| {
         attr.path().is_ident("group") && matches!(attr.meta, syn::Meta::Path(_))
+    })
+}
+
+/// Check whether a field is marked with `#[writable]` (no arguments).
+///
+/// Used to override the default readonly classification for `&'a AccountView`
+/// and `&'a [AccountView]` raw fields that are written on-chain via
+/// `borrow_unchecked_mut()`. Without this, the inferred flag is `isMut: false`
+/// since `analyze_field_type` cannot infer mutability from a bare reference.
+fn has_writable_attr(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        attr.path().is_ident("writable") && matches!(attr.meta, syn::Meta::Path(_))
     })
 }
 
