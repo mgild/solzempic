@@ -292,14 +292,18 @@ impl<S: PdaSeeds, T> Pda for PdaBase<S, T> {
 /// }
 /// ```
 pub trait AccountGroup<'a>: Sized {
-    /// Number of account slots this group occupies in the instruction.
-    const ACCOUNT_COUNT: usize;
-
     /// Per-field metadata for IDL generation (name, signer, writable, program).
     ///
-    /// Length must equal `ACCOUNT_COUNT`. Populated automatically by
-    /// `#[derive(AccountGroupFields)]`; default empty for backwards compat.
+    /// Populated automatically by `#[derive(AccountGroupFields)]`; default
+    /// empty for backwards compat.
     const FIELD_METADATA: &'static [crate::AccountGroupField] = &[];
+
+    /// Number of account slots this group occupies in the instruction.
+    ///
+    /// Defaults to `FIELD_METADATA.len()` — impls that populate
+    /// `FIELD_METADATA` don't need to override this. Only override when
+    /// you're implementing `AccountGroup` without field metadata.
+    const ACCOUNT_COUNT: usize = Self::FIELD_METADATA.len();
 
     /// Load the group from a contiguous slice of account views.
     fn load(accounts: &'a [pinocchio::AccountView]) -> Result<Self, ProgramError>;
