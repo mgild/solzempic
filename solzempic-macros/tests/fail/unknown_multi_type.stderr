@@ -1,0 +1,7 @@
+error: proc-macro derive panicked
+ --> tests/fail/unknown_multi_type.rs:9:10
+  |
+9 | #[derive(solzempic::AccountGroupFields)]
+  |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: message: AccountGroupFields derive only supports structs with named fields

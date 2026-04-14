@@ -1,0 +1,11 @@
+error[E0277]: the trait bound `NotAGroup<'static>: AccountGroup<'static>` is not satisfied
+  --> tests/fail/group_without_derive.rs:24:21
+   |
+24 |     pub trader_ctx: NotAGroup<'a>,
+   |                     ^^^^^^^^^^^^^ unsatisfied trait bound
+   |
+help: the trait `AccountGroup<'static>` is not implemented for `NotAGroup<'static>`
+  --> tests/fail/group_without_derive.rs:16:1
+   |
+16 | pub struct NotAGroup<'a> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
