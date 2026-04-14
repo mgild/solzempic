@@ -1507,7 +1507,7 @@ fn instruction_struct_impl(attr: TokenStream, input: ItemStruct) -> TokenStream 
 ///
 /// `ShardListRef{,Mut}` fields expand to 2 entries suffixed `_current`/`_next`.
 /// `ShardRef{,Mut}Context` fields expand to 3 entries suffixed `_low`/`_current`/`_high`.
-#[proc_macro_derive(AccountGroupFields)]
+#[proc_macro_derive(AccountGroupFields, attributes(writable))]
 pub fn derive_account_group_fields(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as ItemStruct);
     let name = &input.ident;
