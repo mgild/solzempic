@@ -2279,3 +2279,84 @@ pub fn event(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     TokenStream::from(expanded)
 }
+
+/// Attribute macro for value-type (non-account) structs referenced by the IDL.
+///
+/// # What It Does
+///
+/// Registers a struct with the solzempic IDL emitter so it is included in the
+/// generated IDL's `"types"` section. Unlike `#[account]`, the struct is NOT
+/// treated as a top-level account — no discriminator, no Loadable impl, no
+/// entry in the `"accounts"` section.
+///
+/// Use this for any `#[repr(C)] Pod` struct that is referenced from an
+/// account field or instruction parameter but is stored inline rather than as
+/// a top-level account. Examples: cached counters (TreeState), nested config
+/// blobs (OrderBookConfig), rolling stats, or instruction-parameter structs.
+///
+/// # Generated Code
+///
+/// The struct is emitted unchanged plus:
+/// - `unsafe impl bytemuck::Pod`, `unsafe impl bytemuck::Zeroable`
+/// - `impl solzempic::ValueTypeIdlMeta for Struct`
+/// - Inventory registration so the IDL emitter picks it up automatically
+///
+/// # Example
+///
+/// ```ignore
+/// #[solzempic::value_type]
+/// pub struct TreeState {
+///     pub root: u32,
+///     pub min_idx: u32,
+///     pub max_idx: u32,
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn value_type(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemStruct);
+    let name = &input.ident;
+    let name_str = name.to_string();
+
+    let fields = match &input.fields {
+        Fields::Named(fields_named) => &fields_named.named,
+        _ => panic!("value_type macro only supports structs with named fields"),
+    };
+
+    // Generate field metadata for IDL. Mirrors the FieldMeta generation used by
+    // the `#[account]` macro so both sources produce identical type entries.
+    let field_metas: Vec<_> = fields
+        .iter()
+        .map(|f| {
+            let field_name = f.ident.as_ref().expect("named field").to_string();
+            let field_type = type_to_string(&f.ty);
+            quote! {
+                ::solzempic::FieldMeta {
+                    name: #field_name,
+                    type_name: #field_type,
+                }
+            }
+        })
+        .collect();
+
+    let expanded = quote! {
+        #input
+
+        impl ::solzempic::ValueTypeIdlMeta for #name {
+            const NAME: &'static str = #name_str;
+            const FIELDS: &'static [::solzempic::FieldMeta] = &[
+                #(#field_metas),*
+            ];
+            const META: ::solzempic::ValueTypeMeta = ::solzempic::ValueTypeMeta {
+                name: Self::NAME,
+                fields: Self::FIELDS,
+            };
+        }
+
+        #[cfg(feature = "idl")]
+        ::solzempic::inventory::submit! {
+            &<#name as ::solzempic::ValueTypeIdlMeta>::META
+        }
+    };
+
+    TokenStream::from(expanded)
+}

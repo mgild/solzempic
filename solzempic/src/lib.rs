@@ -224,7 +224,7 @@ pub use event::{emit_event, Event, EventFieldMeta, EventIdlMeta, EventMeta};
 
 // Re-export derive macros (Account derive renamed to avoid conflict with Account trait)
 pub use solzempic_macros::{
-    account, event, instruction, instruction_raw, instruction_raw_unsafe, params,
+    account, event, instruction, instruction_raw, instruction_raw_unsafe, params, value_type,
     Account as AccountDerive, AccountGroupFields, SolzempicEntrypoint,
 };
 
@@ -826,6 +826,47 @@ pub use bs58;
 // Inventory collection for account types
 #[cfg(feature = "idl")]
 inventory::collect!(&'static AccountTypeMeta);
+
+// ============================================================================
+// Value Type Metadata (for IDL generation)
+// ============================================================================
+//
+// Account types (`#[account]`) are program-owned top-level accounts with a
+// discriminator. Many structs referenced from account fields and instruction
+// parameters are NOT themselves accounts (they have no discriminator, are
+// stored inline, and never appear as top-level accounts). Examples: TreeState,
+// OrderBookConfig, RollingPeriodStats, or instruction-parameter structs like
+// PropOrderSide.
+//
+// Anchor's IDL still needs a definition for these types under `"types"` so
+// downstream consumers (codama, anchor-cli) can generate codecs for any field
+// that references them. The `#[value_type]` macro registers such a struct in
+// a separate inventory so the IDL emitter can include it in the `"types"`
+// section without minting a fake account entry.
+
+/// Metadata for a non-account struct that appears in the IDL `"types"` section.
+#[derive(Clone, Copy, Debug)]
+pub struct ValueTypeMeta {
+    /// Value type name (e.g., "TreeState", "OrderBookConfig").
+    pub name: &'static str,
+    /// Field metadata slice.
+    pub fields: &'static [FieldMeta],
+}
+
+/// Trait for value types (non-account structs) that provide IDL metadata.
+/// Implemented by `#[value_type]` macro when `idl` feature is enabled.
+pub trait ValueTypeIdlMeta {
+    /// Type name.
+    const NAME: &'static str;
+    /// Field metadata.
+    const FIELDS: &'static [FieldMeta];
+    /// Complete value type metadata.
+    const META: ValueTypeMeta;
+}
+
+// Inventory collection for value types
+#[cfg(feature = "idl")]
+inventory::collect!(&'static ValueTypeMeta);
 
 /// Define framework type aliases for account wrappers.
 ///

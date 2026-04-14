@@ -18,7 +18,7 @@
 //! }
 //! ```
 
-use crate::{AccountTypeMeta, EventMeta, InstructionMeta};
+use crate::{AccountTypeMeta, EventMeta, InstructionMeta, ValueTypeMeta};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -73,9 +73,13 @@ pub fn to_json(
                 "          \"name\": \"{}\",\n",
                 to_camel_case(acc.name)
             ));
-            json.push_str(&format!("          \"isMut\": {},\n", acc.is_writable));
-            json.push_str(&format!("          \"isSigner\": {},\n", acc.is_signer));
-            json.push_str("          \"isOptional\": false\n");
+            // Emit V01-style keys (Anchor IDL spec 0.1.0): `writable`, `signer`, `optional`.
+            // The legacy V00 keys (`isMut`, `isSigner`, `isOptional`) are ignored by
+            // `@codama/nodes-from-anchor` when `metadata.spec === "0.1.0"`, which
+            // caused writable/signer flags to silently drop out of the generated clients.
+            json.push_str(&format!("          \"writable\": {},\n", acc.is_writable));
+            json.push_str(&format!("          \"signer\": {},\n", acc.is_signer));
+            json.push_str("          \"optional\": false\n");
             json.push_str("        }");
             if j < instr.accounts.len() - 1 {
                 json.push(',');
@@ -154,12 +158,25 @@ pub fn to_json_with_accounts(
         .copied()
         .collect();
 
+    // Auto-collect value types (non-account structs referenced by IDL) via inventory
+    let value_types: Vec<&ValueTypeMeta> = crate::inventory::iter::<&'static ValueTypeMeta>()
+        .copied()
+        .collect();
+
     // Auto-collect events via inventory
     let events: Vec<&EventMeta> = crate::inventory::iter::<&'static EventMeta>()
         .copied()
         .collect();
 
-    to_json_full_with_events(address, name, version, instructions, &accounts, &events)
+    to_json_full_with_events_and_types(
+        address,
+        name,
+        version,
+        instructions,
+        &accounts,
+        &value_types,
+        &events,
+    )
 }
 
 /// Generate JSON IDL with explicit account types (no events).
@@ -179,13 +196,30 @@ pub fn to_json_full(
 /// Generate JSON IDL with explicit account types and events.
 ///
 /// Use this if you want to manually specify account types and events rather
-/// than using automatic collection.
+/// than using automatic collection. Value types default to empty.
 pub fn to_json_full_with_events(
     address: &str,
     name: &str,
     version: &str,
     instructions: &[InstructionMeta],
     accounts: &[&AccountTypeMeta],
+    events: &[&EventMeta],
+) -> String {
+    to_json_full_with_events_and_types(address, name, version, instructions, accounts, &[], events)
+}
+
+/// Generate JSON IDL with explicit account types, value types, and events.
+///
+/// Value types are non-account structs referenced from instruction parameters
+/// or account fields (e.g., nested config blobs, cached counters). They are
+/// emitted into the `"types"` section but not the `"accounts"` section.
+pub fn to_json_full_with_events_and_types(
+    address: &str,
+    name: &str,
+    version: &str,
+    instructions: &[InstructionMeta],
+    accounts: &[&AccountTypeMeta],
+    value_types: &[&ValueTypeMeta],
     events: &[&EventMeta],
 ) -> String {
     let mut json = String::with_capacity(128 * 1024);
@@ -219,9 +253,13 @@ pub fn to_json_full_with_events(
                 "          \"name\": \"{}\",\n",
                 to_camel_case(acc.name)
             ));
-            json.push_str(&format!("          \"isMut\": {},\n", acc.is_writable));
-            json.push_str(&format!("          \"isSigner\": {},\n", acc.is_signer));
-            json.push_str("          \"isOptional\": false\n");
+            // Emit V01-style keys (Anchor IDL spec 0.1.0): `writable`, `signer`, `optional`.
+            // The legacy V00 keys (`isMut`, `isSigner`, `isOptional`) are ignored by
+            // `@codama/nodes-from-anchor` when `metadata.spec === "0.1.0"`, which
+            // caused writable/signer flags to silently drop out of the generated clients.
+            json.push_str(&format!("          \"writable\": {},\n", acc.is_writable));
+            json.push_str(&format!("          \"signer\": {},\n", acc.is_signer));
+            json.push_str("          \"optional\": false\n");
             json.push_str("        }");
             if j < instr.accounts.len() - 1 {
                 json.push(',');
@@ -277,6 +315,17 @@ pub fn to_json_full_with_events(
     json.push_str("  ],\n");
 
     // Types section (full field definitions)
+    //
+    // The physical Rust struct stores an explicit `discriminator: [u8; 8]`
+    // as its first field for on-chain layout. However, the Anchor IDL spec
+    // models the discriminator as account-level metadata (the `"discriminator"`
+    // array on each entry in the `"accounts"` section), and the downstream
+    // Codama converter re-prepends a discriminator field based on that
+    // metadata. If we also emit it here as a struct field, codama ends up
+    // with two discriminator fields and the account size is double-counted.
+    //
+    // Skip any field literally named `discriminator` so codama can own
+    // the discriminator modeling end-to-end.
     json.push_str("  \"types\": [\n");
     for (i, acc) in accounts.iter().enumerate() {
         json.push_str("    {\n");
@@ -284,7 +333,12 @@ pub fn to_json_full_with_events(
         json.push_str("      \"type\": {\n");
         json.push_str("        \"kind\": \"struct\",\n");
         json.push_str("        \"fields\": [\n");
-        for (j, field) in acc.fields.iter().enumerate() {
+        let emitted_fields: Vec<&crate::FieldMeta> = acc
+            .fields
+            .iter()
+            .filter(|f| f.name != "discriminator")
+            .collect();
+        for (j, field) in emitted_fields.iter().enumerate() {
             json.push_str("          {\n");
             json.push_str(&format!(
                 "            \"name\": \"{}\",\n",
@@ -295,7 +349,7 @@ pub fn to_json_full_with_events(
                 rust_type_to_idl_json(field.type_name)
             ));
             json.push_str("          }");
-            if j < acc.fields.len() - 1 {
+            if j < emitted_fields.len() - 1 {
                 json.push(',');
             }
             json.push('\n');
@@ -303,7 +357,41 @@ pub fn to_json_full_with_events(
         json.push_str("        ]\n");
         json.push_str("      }\n");
         json.push_str("    }");
-        if i < accounts.len() - 1 {
+        if i < accounts.len() - 1 || !value_types.is_empty() {
+            json.push(',');
+        }
+        json.push('\n');
+    }
+
+    // Value types (non-account structs referenced by account fields or
+    // instruction parameters). They are emitted into the same `"types"`
+    // section so downstream consumers can resolve references.
+    for (i, vt) in value_types.iter().enumerate() {
+        json.push_str("    {\n");
+        json.push_str(&format!("      \"name\": \"{}\",\n", vt.name));
+        json.push_str("      \"type\": {\n");
+        json.push_str("        \"kind\": \"struct\",\n");
+        json.push_str("        \"fields\": [\n");
+        for (j, field) in vt.fields.iter().enumerate() {
+            json.push_str("          {\n");
+            json.push_str(&format!(
+                "            \"name\": \"{}\",\n",
+                to_camel_case(field.name)
+            ));
+            json.push_str(&format!(
+                "            \"type\": {}\n",
+                rust_type_to_idl_json(field.type_name)
+            ));
+            json.push_str("          }");
+            if j < vt.fields.len() - 1 {
+                json.push(',');
+            }
+            json.push('\n');
+        }
+        json.push_str("        ]\n");
+        json.push_str("      }\n");
+        json.push_str("    }");
+        if i < value_types.len() - 1 {
             json.push(',');
         }
         json.push('\n');
@@ -418,7 +506,13 @@ fn rust_type_to_idl_json(rust_type: &str) -> String {
                 "\"bytes\"".to_string()
             }
         }
-        _ => format!("\"{}\"", rust_type),
+        _ => {
+            // Fallback: treat as a reference to a user-defined type. Anchor IDL
+            // spec 0.1.0 (V01) models these as `{ "defined": { "name": "<T>" } }`
+            // rather than a bare string — the latter triggers
+            // `Unrecognized Anchor IDL type` in `@codama/nodes-from-anchor`.
+            format!("{{ \"defined\": {{ \"name\": \"{}\" }} }}", rust_type)
+        }
     }
 }
 
