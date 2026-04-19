@@ -312,8 +312,19 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
 impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
     /// Initialize an uninitialized account and wrap it.
     ///
-    /// Discriminator byte 0 == uninitialized. Single borrow, no owner check
-    /// (runtime enforces write-ownership).
+    /// # Reinit-hijacking guard
+    ///
+    /// Every byte in `data[..T::LEN]` must be zero — a zero discriminator
+    /// alone isn't enough, since an attacker could clear byte 0 of a
+    /// drained-but-not-closed account to smuggle stale state through.
+    ///
+    /// Ownership is enforced separately: the runtime's write-ownership
+    /// check prevents writes to accounts the program does not own, and
+    /// typed callers layer on explicit `owned_by` checks where warranted.
+    /// Adding an unconditional owner check here would break native test
+    /// harnesses that set up accounts with system ownership and rely on
+    /// `create_pda_account`'s CPI to transition ownership, which in
+    /// native mode is a no-op.
     #[inline]
     pub fn init(info: &'a AccountView) -> Result<Self, ProgramError> {
         if !info.is_writable() {
@@ -323,7 +334,7 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
         if data.len() < T::LEN {
             return Err(crate::errors::invalid_account_data());
         }
-        if data[0] != 0 {
+        if data[..T::LEN].iter().any(|b| *b != 0) {
             return Err(crate::errors::account_already_initialized());
         }
         data[0] = T::DISCRIMINATOR;
@@ -435,9 +446,31 @@ impl<'a, T: Initializable, F: Framework> AccountRefMut<'a, T, F> {
         let _ = system_program;
         create_pda_account(payer, info, &F::PROGRAM_ID, space, seeds)?;
 
-        // Initialize: write discriminator byte
+        // Reinit-hijacking guard.
+        //
+        // `create_pda_account` short-circuits when the account is already
+        // program-owned with sufficient data (this is deliberate, to
+        // support genesis pre-allocation of accounts too large for
+        // per-CPI data growth limits — those are written by the runtime
+        // with ALL ZEROS). But the short-circuit also fires for accounts
+        // that were previously initialized by THIS program via a prior
+        // instruction call — e.g. `TraderMarketStateInit` replayed
+        // against a live `TraderCredit` PDA. Before this guard,
+        // `init_pda` would silently rewrite the discriminator byte and
+        // hand the caller a handle to a struct containing stale data
+        // (RB-tree root pointing at live entries, `next_alloc` reset to
+        // 0, etc.), enabling the caller's `init_data` helper to corrupt
+        // or reassign user funds.
+        //
+        // Mirror of `init()`'s zero-data guard at line 334. A legitimate
+        // first-time init (fresh CPI) sees all-zero data; a legitimate
+        // pre-allocated account sees all-zero data; only a re-init of
+        // an initialized account triggers this rejection.
         {
             let data = unsafe { info.borrow_unchecked_mut() };
+            if data[..T::LEN].iter().any(|b| *b != 0) {
+                return Err(crate::errors::account_already_initialized());
+            }
             data[0] = T::DISCRIMINATOR;
         }
 
