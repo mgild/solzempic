@@ -33,10 +33,19 @@ pub trait Account: Pod {
     /// Get the discriminator bytes from the account data.
     fn discriminator(&self) -> &[u8; 8];
 
-    /// Verify this account has the correct discriminator.
+    /// Verify this account has the correct 8-byte discriminator.
+    ///
+    /// Checks byte 0 against `Self::DISCRIMINATOR` AND bytes 1..8 are
+    /// zero (matching the `[disc, 0, 0, 0, 0, 0, 0, 0]` serialization
+    /// every `Account` implementor uses). Prevents type-confusion
+    /// attacks where byte 0 collides but bytes 1..8 encode another
+    /// type's multi-byte discriminator prefix.
     #[inline]
     fn verify_discriminator(&self) -> bool {
-        self.discriminator()[0] == Self::DISCRIMINATOR
+        let d = self.discriminator();
+        d[0] == Self::DISCRIMINATOR
+            && d[1] == 0 && d[2] == 0 && d[3] == 0
+            && d[4] == 0 && d[5] == 0 && d[6] == 0 && d[7] == 0
     }
 
     /// Check raw account data without parsing.
@@ -164,10 +173,25 @@ pub trait Initializable: Loadable {}
 ///
 /// # Returns
 ///
-/// `true` if the data is non-empty and the first byte matches the expected discriminator.
+/// `true` if the data has at least 8 bytes, byte 0 matches `expected`,
+/// AND bytes 1..8 are all zero. The trailing-zero check prevents a
+/// type-confusion attack where an account's byte 0 matches the
+/// target discriminator but whose bytes 1..8 encode a different
+/// account type's multi-byte discriminator prefix.
+///
+/// Matches `AccountType::to_bytes` serialization `[disc, 0, 0, 0, 0,
+/// 0, 0, 0]` across every Braid account type.
 #[inline]
 pub fn check_discriminator(data: &[u8], expected: u8) -> bool {
-    !data.is_empty() && data[0] == expected
+    data.len() >= 8
+        && data[0] == expected
+        && data[1] == 0
+        && data[2] == 0
+        && data[3] == 0
+        && data[4] == 0
+        && data[5] == 0
+        && data[6] == 0
+        && data[7] == 0
 }
 
 // ============================================================================

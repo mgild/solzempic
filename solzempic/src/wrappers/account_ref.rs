@@ -122,9 +122,24 @@ impl<'a, T: Loadable, F: Framework> AccountRef<'a, T, F> {
     /// * [`ProgramError::InvalidAccountData`] - Data too small or wrong discriminator
     #[inline]
     pub fn load_unchecked(info: &'a AccountView) -> Result<Self, ProgramError> {
-        // Use data_len() + data_ptr() separately instead of borrow_unchecked()
-        // which constructs a full slice. Saves the from_raw_parts overhead.
-        if info.data_len() < T::LEN || unsafe { *info.data_ptr() } != T::DISCRIMINATOR {
+        // Reinit-hijacking / type-confusion hardening: compare all 8
+        // discriminator bytes, not just byte 0. See parallel comment
+        // on `AccountRefMut::load_unchecked` for the rationale —
+        // account-type enums serialize discriminators as
+        // `[disc_u8, 0, 0, 0, 0, 0, 0, 0]` and the 1-byte-only check
+        // left a latent type-confusion surface for accounts whose
+        // byte 0 happened to match.
+        if info.data_len() < T::LEN {
+            return Err(crate::errors::invalid_account_data());
+        }
+        // SAFETY: data_len() >= T::LEN >= 8 enforced above.
+        let disc_bytes: [u8; 8] = unsafe { *(info.data_ptr() as *const [u8; 8]) };
+        let expected = {
+            let mut e = [0u8; 8];
+            e[0] = T::DISCRIMINATOR;
+            e
+        };
+        if disc_bytes != expected {
             return Err(crate::errors::invalid_account_data());
         }
 

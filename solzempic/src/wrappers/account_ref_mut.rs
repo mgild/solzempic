@@ -184,9 +184,32 @@ impl<'a, T: Loadable, F: Framework> AccountRefMut<'a, T, F> {
     /// * [`ProgramError::InvalidAccountData`] - Data too small or wrong discriminator
     #[inline]
     pub fn load_unchecked(info: &'a AccountView) -> Result<Self, ProgramError> {
-        // Use data_len() + data_ptr() separately instead of borrow_unchecked()
-        // which constructs a full slice. Saves the from_raw_parts overhead.
-        if info.data_len() < T::LEN || unsafe { *info.data_ptr() } != T::DISCRIMINATOR {
+        // Reinit-hijacking / type-confusion hardening: compare all 8
+        // discriminator bytes, not just byte 0. Account-type enums
+        // serialize discriminators as `[disc_u8, 0, 0, 0, 0, 0, 0, 0]`
+        // (e.g. `braid_solana_types::AccountType::to_bytes`), so
+        // checking bytes 1..8 == 0 closes a "byte 0 collision" attack:
+        // an attacker who can compose a program-owned account whose
+        // byte 0 happens to match `T::DISCRIMINATOR` but whose bytes
+        // 1..8 are non-zero (e.g. a legacy account type using a
+        // multi-byte discriminator prefix) would otherwise slip past
+        // the wrapper's validation and be aliased into the wrong type.
+        //
+        // Uses `data_len()` + `data_ptr()` directly rather than
+        // `borrow_unchecked()` to avoid constructing a full slice.
+        if info.data_len() < T::LEN {
+            return Err(crate::errors::invalid_account_data());
+        }
+        // SAFETY: data_len() >= T::LEN >= 8 was enforced above (every
+        // Pod account struct with a discriminator field has LEN >= 8),
+        // so the 8-byte read is in-bounds.
+        let disc_bytes: [u8; 8] = unsafe { *(info.data_ptr() as *const [u8; 8]) };
+        let expected = {
+            let mut e = [0u8; 8];
+            e[0] = T::DISCRIMINATOR;
+            e
+        };
+        if disc_bytes != expected {
             return Err(crate::errors::invalid_account_data());
         }
 
