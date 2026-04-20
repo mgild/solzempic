@@ -3,10 +3,8 @@
 //! This module provides [`ShardListRefMut`], a container for managing
 //! singly-linked shard lists with mutable access for insert/remove operations.
 
-use core::ptr;
-
 use pinocchio::{error::ProgramError, AccountView};
-use solana_address::Address;
+use solana_address::{address_eq, Address};
 
 use crate::{Framework, Loadable};
 
@@ -106,8 +104,22 @@ impl<'a, T: ShardListNode, F: Framework> ShardListRefMut<'a, T, F> {
     ) -> Result<Self, ProgramError> {
         let current = AccountRefMut::load(current_info)?;
 
-        // Check if next is same as current
-        let current_next_same = ptr::eq(current_info, next_info);
+        // Check if next is the same account as current.
+        //
+        // Must compare by **account address** rather than by `ptr::eq` on
+        // the `&AccountView` references themselves: pinocchio's dup-stub
+        // convention copies the `AccountView` struct into each positional
+        // slot (see `entrypoint_no_dup.rs:~61`), so two different slot
+        // positions can hold `AccountView` copies wrapping the SAME
+        // underlying `RuntimeAccount`. A `ptr::eq(current_info, next_info)`
+        // comparison would return false (different slice positions), the
+        // code would pick `NextRef::Owned`, and a second `AccountRefMut::
+        // load` on the same underlying buffer would silently produce two
+        // aliased `&mut [u8]` slices once callers invoke `all_data_mut`
+        // — immediate Rust UB. `address_eq` compares the stored
+        // Address inside each `AccountView`, which is identical for dup
+        // stubs, correctly triggering `NextRef::AliasCurrent`.
+        let current_next_same = address_eq(current_info.address(), next_info.address());
         let next_ref = if current_next_same {
             NextRef::AliasCurrent
         } else {
@@ -136,7 +148,9 @@ impl<'a, T: ShardListNode, F: Framework> ShardListRefMut<'a, T, F> {
     ) -> Option<Self> {
         let current = AccountRefMut::try_load(current_info)?;
 
-        let current_next_same = ptr::eq(current_info, next_info);
+        // See `with_next` for the full rationale on `address_eq` vs
+        // `ptr::eq` here — dup-stubs break the ptr::eq path.
+        let current_next_same = address_eq(current_info.address(), next_info.address());
         let next_ref = if current_next_same {
             NextRef::AliasCurrent
         } else {

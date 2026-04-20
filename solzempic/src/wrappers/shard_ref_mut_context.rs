@@ -3,10 +3,8 @@
 //! This module provides [`ShardRefMutContext`], a container for managing three
 //! related shard accounts (low, current, high) with mutable access.
 
-use core::ptr;
-
 use pinocchio::{error::ProgramError, AccountView};
-use solana_address::Address;
+use solana_address::{address_eq, Address};
 
 use crate::{Framework, Loadable};
 
@@ -132,17 +130,25 @@ impl<'a, T: Loadable, F: Framework> ShardRefMutContext<'a, T, F> {
         // Always load low
         let low = AccountRefMut::load(low_info)?;
 
-        // Check if current is same as low (compare raw pointers to avoid loading twice)
-        let low_current_same = ptr::eq(low_info, current_info);
+        // Dup-stub-safe equality: compare stored account addresses rather
+        // than `&AccountView` slice positions. Pinocchio's dup-stub
+        // convention copies the `AccountView` struct into each slot, so
+        // two positional slots may hold copies wrapping the SAME
+        // `RuntimeAccount`. `ptr::eq` on the references would miss that,
+        // pick `Owned`, and `load` the same buffer twice → aliased
+        // `&mut [u8]` slices once callers touch `data_mut()` = Rust UB.
+        // `address_eq` on the stored Address correctly detects dup stubs
+        // and routes to the `Alias*` variants.
+        let low_current_same = address_eq(low_info.address(), current_info.address());
         let current_ref = if low_current_same {
             CurrentRef::AliasLow
         } else {
             CurrentRef::Owned(AccountRefMut::load(current_info)?)
         };
 
-        // Check if high is same as low or current
-        let low_high_same = ptr::eq(low_info, high_info);
-        let current_high_same = ptr::eq(current_info, high_info);
+        // Check if high is same as low or current (same dup-stub rationale).
+        let low_high_same = address_eq(low_info.address(), high_info.address());
+        let current_high_same = address_eq(current_info.address(), high_info.address());
         let high_ref = if low_high_same {
             HighRef::AliasLow
         } else if current_high_same {
@@ -275,15 +281,17 @@ impl<'a, T: Loadable, F: Framework> ShardRefMutContext<'a, T, F> {
     ) -> Option<Self> {
         let low = AccountRefMut::try_load(low_info)?;
 
-        let low_current_same = ptr::eq(low_info, current_info);
+        // See `new` for the full rationale on `address_eq` vs `ptr::eq`
+        // — dup-stubs break the ptr::eq path.
+        let low_current_same = address_eq(low_info.address(), current_info.address());
         let current_ref = if low_current_same {
             CurrentRef::AliasLow
         } else {
             CurrentRef::Owned(AccountRefMut::try_load(current_info)?)
         };
 
-        let low_high_same = ptr::eq(low_info, high_info);
-        let current_high_same = ptr::eq(current_info, high_info);
+        let low_high_same = address_eq(low_info.address(), high_info.address());
+        let current_high_same = address_eq(current_info.address(), high_info.address());
         let high_ref = if low_high_same {
             HighRef::AliasLow
         } else if current_high_same {
